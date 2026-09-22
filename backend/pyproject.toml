@@ -1,0 +1,114 @@
+[project]
+name = "coachlink-backend"
+version = "0.1.0"
+description = "CoachLink — API FastAPI (coach sportif <-> clients)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.9",
+    "cryptography>=43.0",
+    "structlog>=24.4",
+    "redis>=5.2",
+    "celery>=5.4",
+    "httpx>=0.27",
+    "python-multipart>=0.0.12",
+    "boto3>=1.35",
+    "email-validator>=2.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "types-boto3",
+    # Integration + RLS tests run against a REAL PostgreSQL 16 (never SQLite:
+    # RLS policies simply do not exist there, and that is the project's risk #1).
+    "testcontainers[postgresql]>=4.8",
+    "psycopg[binary]>=3.2",
+    "pytest-xdist>=3.6",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+# --------------------------------------------------------------------------
+# Ruff — lint + format
+# --------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "W",
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "ASYNC",
+    "S",    # bandit
+    "RUF",
+]
+ignore = [
+    "B008",  # FastAPI Depends() in defaults is idiomatic
+    "S101",  # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "S311"]
+"alembic/*" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# --------------------------------------------------------------------------
+# mypy — strict uniquement sur app/domain (logique metier pure)
+# --------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+plugins = []
+ignore_missing_imports = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "app.domain.*"
+strict = true
+disallow_any_generics = true
+warn_return_any = true
+
+# --------------------------------------------------------------------------
+# pytest
+# --------------------------------------------------------------------------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: requires a real PostgreSQL 16 + Redis 7 (CI services / docker-compose)",
+    "rls: exercises PostgreSQL Row Level Security directly",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/workers/*", "alembic/*"]

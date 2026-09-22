@@ -1,0 +1,164 @@
+# =============================================================================
+# CI Backend — Python 3.12 / FastAPI
+#
+# Déclenché uniquement sur les chemins backend (exigence Tech Lead : ne pas
+# faire tourner Flutter sur une PR backend, et inversement).
+#
+# Les tests tournent contre un VRAI PostgreSQL 16 : les policies Row Level
+# Security n'existent pas en SQLite, et c'est le risque de sécurité n°1 du
+# projet (fuite transversale coach A -> client de coach B). Voir
+# ARCHITECTURE.md §4 "Règle d'accès transversale".
+# =============================================================================
+
+name: CI Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "infra/postgres/**"
+      - ".github/workflows/ci-backend.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "infra/postgres/**"
+      - ".github/workflows/ci-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Seuil de couverture sur la logique métier (app/domain + app/services).
+  COVERAGE_MIN: "80"
+  # Tant que `app/domain` et `app/services` sont quasi vides, un seuil bloquant
+  # mettrait la CI au rouge dès le premier commit. Le rapport est donc affiché
+  # mais non bloquant. Passer à "true" quand l'agent QA donne son feu vert
+  # (demande explicite de sa part, 2026-09-22).
+  COVERAGE_ENFORCE: "false"
+
+jobs:
+  backend:
+    name: Lint · Types · Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # Rôle PROPRIÉTAIRE (migrations Alembic). Le rôle applicatif
+          # NOBYPASSRLS est créé juste après, via infra/postgres/init.
+          POSTGRES_USER: coachlink_owner
+          POSTGRES_PASSWORD: ci_only_not_a_secret
+          POSTGRES_DB: coachlink_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U coachlink_owner -d coachlink_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Rejoue le MÊME script qu'en dev local : source de vérité unique pour les
+      # rôles. Garantit que la CI teste bien avec un rôle qui ne peut pas
+      # contourner la RLS.
+      - name: Provision PostgreSQL roles (RLS) + extensions
+        working-directory: .
+        env:
+          PGPASSWORD: ci_only_not_a_secret
+        run: |
+          psql -h localhost -U coachlink_owner -d coachlink_test \
+               -v ON_ERROR_STOP=1 \
+               -f infra/postgres/init/01-roles.sql
+
+      - name: Ruff — lint
+        run: ruff check --output-format=github .
+
+      - name: Ruff — format check
+        run: ruff format --check .
+
+      - name: mypy — strict sur app/domain
+        run: mypy app/domain
+
+      # Retour rapide : logique métier pure, sans I/O. Si ça casse, inutile
+      # d'attendre les tests d'intégration.
+      - name: pytest — tests rapides (sans services)
+        run: pytest -m "not integration and not rls" -q
+
+      - name: pytest — suite complète (+ couverture logique métier)
+        env:
+          ENVIRONMENT: ci
+          # --- Noms attendus par le conftest.py de l'agent QA ---
+          # Rôle propriétaire : migrations Alembic, création du schéma de test.
+          TEST_DATABASE_URL: postgresql+asyncpg://coachlink_owner:ci_only_not_a_secret@localhost:5432/coachlink_test
+          # Rôle applicatif : NOSUPERUSER + NOBYPASSRLS. C'est CE rôle qui doit
+          # servir aux tests RLS — avec un superuser, les policies sont
+          # contournées silencieusement et les tests passeraient au vert sans
+          # rien vérifier (risque n°1 du projet).
+          TEST_DATABASE_URL_APP: postgresql+asyncpg://coachlink_app:coachlink_app_dev_only@localhost:5432/coachlink_test
+          TEST_REDIS_URL: redis://localhost:6379/1
+          # --- Alias pour la config applicative (Pydantic Settings) ---
+          DATABASE_URL: postgresql+asyncpg://coachlink_app:coachlink_app_dev_only@localhost:5432/coachlink_test
+          DATABASE_URL_OWNER: postgresql+asyncpg://coachlink_owner:ci_only_not_a_secret@localhost:5432/coachlink_test
+          REDIS_URL: redis://localhost:6379/0
+          # Valeurs FACTICES de CI. Les vrais secrets (KEK de chiffrement des
+          # données de santé) vivent dans Scaleway Secret Manager — jamais ici,
+          # jamais dans le repo. Voir ARCHITECTURE.md §5.1.
+          SECRET_KEY: ci_only_not_a_secret_change_me
+          ENCRYPTION_KEK: ci_only_not_a_secret_change_me
+        run: |
+          if [ "${COVERAGE_ENFORCE}" = "true" ]; then
+            FAIL_UNDER="--cov-fail-under=${COVERAGE_MIN}"
+          else
+            FAIL_UNDER=""
+            echo "::notice::Seuil de couverture ${COVERAGE_MIN}% affiché mais NON bloquant (COVERAGE_ENFORCE=false)."
+          fi
+          pytest -q \
+            --cov=app.domain --cov=app.services \
+            --cov-report=term-missing --cov-report=xml \
+            ${FAIL_UNDER}
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7

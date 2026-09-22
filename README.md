@@ -1,47 +1,153 @@
 # CoachLink
 
-Application mobile mettant en relation un coach sportif et ses clients : gestion de programmes
-d'entraînement, suivi de progression (poids, mensurations, photos, performances), plans
-alimentaires optionnels, messagerie coach-client, et abonnement (essai gratuit 10 jours,
-commission par client actif).
+Application mobile mettant en relation un **coach sportif** et ses **clients** : création et suivi
+de programmes d'entraînement, suivi de progression (poids, mensurations, photos, performances),
+plans alimentaires optionnels, messagerie coach-client, et abonnement (essai gratuit 10 jours côté
+client, commission par client actif côté coach).
 
-## État du projet
+> **État** : MVP en cours de construction. L'architecture est figée et documentée dans
+> [`ARCHITECTURE.md`](./ARCHITECTURE.md) — c'est la source de vérité. Le backlog de l'équipe est
+> dans [`TASKS.md`](./TASKS.md).
 
-Le projet est en phase de cadrage. La stack technique (mobile / backend / base de données) est en
-cours de décision par le Tech Lead et sera documentée dans [`ARCHITECTURE.md`](./ARCHITECTURE.md)
-dès qu'elle sera tranchée. Cette section (et "Lancer le projet en dev" ci-dessous) sera mise à jour
-en conséquence.
+---
 
-Le backlog partagé de l'équipe (par phase et par agent) est dans [`TASKS.md`](./TASKS.md).
+## Stack
 
-## Contraintes clés
+| Couche | Choix | Pourquoi (résumé — détail en `ARCHITECTURE.md`) |
+|---|---|---|
+| Mobile | **Flutter 3.x / Dart** | iOS + Android depuis une base unique, offline-first (`drift` + SQLCipher) |
+| Backend | **Python 3.12 / FastAPI** | Contrat OpenAPI, WebSocket natif, écosystème crypto mature |
+| Base de données | **PostgreSQL 16** | Domaine fortement relationnel + **Row Level Security** (cloisonnement coach/client) |
+| Cache / temps réel / files | **Redis 7** | Pub/Sub pour la sync coach↔client, broker Celery |
+| Stockage médias | **S3-compatible** — Scaleway Object Storage (Paris) ; **MinIO** en local | Buckets privés, URLs pré-signées à TTL court |
 
-- **RGPD dès la conception** : chiffrement au repos/transit, hébergement UE, consentement
-  explicite, export/suppression des données utilisateur — non négociable.
-- **Abonnement extensible** : essai gratuit 10 jours côté client, commission par client actif côté
-  coach (scaffolding paiement, ex. Stripe).
+**Contrainte non négociable — RGPD by design.** Les données manipulées (poids, mensurations, photos
+corporelles, nutrition) sont des données de santé au sens large : chiffrement applicatif par colonne,
+**hébergement exclusivement UE**, consentement explicite et bloquant, export et suppression natifs.
+Voir `ARCHITECTURE.md` §5.
 
-## Structure du repo
+---
 
-_À confirmer une fois la stack tranchée (mono-repo probable vu la synchronisation temps réel
-coach-client). Structure indicative pressentie :_
+## Structure du repo (mono-repo)
 
 ```
 CoachLink/
-├── mobile/           # application mobile (coach + client)
-├── backend/          # API + logique métier
-├── docs/             # documentation technique complémentaire
-├── ARCHITECTURE.md   # décisions stack, modèle de données, RGPD (Tech Lead)
-├── TASKS.md          # backlog partagé de l'équipe
-└── README.md
+├── ARCHITECTURE.md          # Source de vérité technique (Tech Lead)
+├── TASKS.md                 # Backlog partagé + journal des décisions
+├── docker-compose.yml       # Environnement de dev local
+├── .env.example             # Variables d'infra dev (à copier en .env)
+├── backend/                 # API FastAPI  (app/api · domain · models · schemas · services · workers · core)
+├── mobile/                  # App Flutter  (lib/core · lib/features/<feature>/{data,domain,presentation})
+├── infra/postgres/init/     # Rôles PostgreSQL + extensions (dev & CI)
+├── docs/                    # ADR, specs, conformité RGPD (registre, DPIA)
+└── .github/workflows/       # CI — un workflow par cible
 ```
+
+---
 
 ## Lancer le projet en dev
 
-_À compléter dès que la stack est choisie et qu'un premier environnement de dev/staging est en
-place (voir Phase 1/5 dans TASKS.md)._
+### 1. Prérequis
+
+- **Docker** + Docker Compose (infra locale)
+- **Python 3.12** (le backend impose `>=3.12` — une 3.10/3.11 ne suffit pas)
+- **Flutter stable** (Dart SDK `>=3.5.0`)
+
+### 2. Infrastructure locale
+
+```bash
+cp .env.example .env
+docker compose up -d
+docker compose ps        # postgres, redis et minio doivent être "healthy"
+```
+
+Cela démarre PostgreSQL 16 (`localhost:5432`), Redis 7 (`localhost:6379`) et MinIO
+(API `localhost:9000`, console web `localhost:9001`), et crée automatiquement :
+
+- les **deux rôles PostgreSQL** (voir encadré ci-dessous) ainsi que les extensions `citext` et `pgcrypto` ;
+- les buckets **privés** `coachlink-media` et `coachlink-exports`.
+
+> #### ⚠️ Deux rôles PostgreSQL, et c'est volontaire
+> - `coachlink_owner` — propriétaire du schéma, **exécute les migrations Alembic**.
+> - `coachlink_app` — rôle utilisé par l'API : `NOSUPERUSER`, **`NOBYPASSRLS`**.
+>
+> Un superuser PostgreSQL contourne **silencieusement** toute policy Row Level Security. Si
+> l'application (ou les tests) tournaient avec le rôle propriétaire, notre seconde barrière contre
+> la fuite transversale *coach A → client de coach B* serait purement décorative, et les tests RLS
+> passeraient au vert **sans rien vérifier**. D'où la séparation stricte.
+>
+> Corollaire pour les migrations : toute table portant des données client doit déclarer
+> `ENABLE ROW LEVEL SECURITY` **et** `FORCE ROW LEVEL SECURITY`, faute de quoi le propriétaire
+> échappe à ses propres policies.
+
+Arrêter l'infra : `docker compose down` (ajouter `-v` pour repartir de zéro, ce qui **rejoue** les
+scripts de `infra/postgres/init/`).
+
+### 3. Backend
+
+```bash
+cd backend
+python3.12 -m venv .venv && source .venv/bin/activate   # Windows : .venv\Scripts\activate
+pip install -e ".[dev]"
+alembic upgrade head          # migrations : à lancer avec le rôle owner
+uvicorn app.main:app --reload
+```
+
+API sur `http://localhost:8000`, documentation OpenAPI sur `http://localhost:8000/docs`.
+
+### 4. Mobile
+
+```bash
+cd mobile
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs   # indispensable : le code généré n'est pas committé
+flutter run
+```
+
+---
+
+## Qualité & CI
+
+La CI (GitHub Actions) est découpée par cible, chaque workflow ne se déclenchant que sur les
+chemins qui le concernent — une PR backend ne lance pas Flutter, et inversement.
+
+| Workflow | Déclencheurs | Étapes |
+|---|---|---|
+| `ci-backend.yml` | `backend/**`, `infra/postgres/**` | `ruff check` · `ruff format --check` · `mypy app/domain` (strict) · `pytest` (rapide puis complet) + couverture |
+| `ci-mobile.yml` | `mobile/**` | `dart format --set-exit-if-changed` · `build_runner` · `flutter analyze` · `flutter test` |
+
+Points à connaître :
+
+- **Les tests backend tournent contre un vrai PostgreSQL 16**, jamais SQLite : la Row Level
+  Security n'existe pas en SQLite, et c'est précisément ce qu'on doit tester.
+- **Le code généré Dart (`*.g.dart`, `*.freezed.dart`) n'est pas committé** — il est régénéré en
+  local et en CI. Cela évite les conflits de merge sur du code que personne ne relit.
+- `mobile/integration_test/` n'est **pas** exécuté en CI standard (nécessite un émulateur).
+- Le seuil de couverture (80 % sur `app/domain` et `app/services`) est pour l'instant **affiché mais
+  non bloquant** : le rendre bloquant alors que ces packages sont quasi vides mettrait la CI au
+  rouge sans rien apprendre à personne. Basculer `COVERAGE_ENFORCE` à `true` dans
+  `.github/workflows/ci-backend.yml` quand la couverture réelle le permettra.
+
+### Conventions
+
+- **Branches** : `main` protégée ; branches `feat/<scope>-<sujet>`, `fix/…` ; PR obligatoire, CI verte requise.
+- **Commits** : [Conventional Commits](https://www.conventionalcommits.org/) — `feat(backend): …`, `fix(mobile): …`, `chore(ci): …`.
+
+---
+
+## Sécurité & données personnelles
+
+- **Aucun secret réel dans le repo.** Les fichiers `.env` sont ignorés par git ; seuls les
+  `.env.example` (valeurs factices) sont versionnés. La KEK qui chiffre les données de santé vit
+  dans un gestionnaire de secrets (Scaleway Secret Manager), jamais dans un fichier du dépôt.
+- **Aucune donnée personnelle réelle** ne doit être chargée dans l'environnement de dev ou de
+  staging — jeux de données fictifs uniquement.
+- Les identifiants présents dans `docker-compose.yml` et `.env.example` sont des valeurs de
+  développement volontairement triviales et publiques ; elles ne doivent jamais être réutilisées
+  ailleurs.
+
+---
 
 ## Équipe
 
-Projet construit par une équipe multi-agents : chef de projet, tech lead, back, front (mobile),
-QA, devops.
+Projet construit par une équipe multi-agents : chef de projet, tech lead, backend, mobile, QA, devops.
