@@ -113,8 +113,13 @@ jobs:
       - name: Ruff — format check
         run: ruff format --check .
 
+      # `-p app.domain` et NON `mypy app/domain` : sans `__init__.py`, l'invocation
+      # par chemin fait résoudre les fichiers comme des modules racine (`ids`,
+      # `enums`), si bien que le bloc `[[tool.mypy.overrides]] module =
+      # "app.domain.*"` de pyproject.toml ne matche jamais — mypy le signale par
+      # `unused section(s)`. Le mode strict demandé ne s'appliquait donc pas.
       - name: mypy — strict sur app/domain
-        run: mypy app/domain
+        run: mypy -p app.domain
 
       # Retour rapide : logique métier pure, sans I/O. Si ça casse, inutile
       # d'attendre les tests d'intégration.

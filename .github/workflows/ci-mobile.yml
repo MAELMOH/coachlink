@@ -46,21 +46,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Flutter (stable)
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # TODO(devops) : épingler une version exacte (ex. flutter-version: 3.35.x)
-          # dès que `front` confirme sa version locale, pour que CI et postes de
-          # dev soient strictement alignés. `pubspec.yaml` exige Dart >= 3.5.0.
+          # Version ÉPINGLÉE sur celle du poste de dev (`front`), et non
+          # `channel: stable`. Raison concrète : le formateur Dart a changé de
+          # style à partir de Dart 3.7. Avec la dernière stable, la CI
+          # reformaterait l'intégralité du projet et `dart format --set-exit-if-changed`
+          # échouerait sur presque chaque fichier, alors que le formatage passe
+          # en local. Une CI qui diverge du poste de dev ne sert à rien.
+          # TODO(equipe) : Flutter 3.24.1 date d'août 2024. Monter de version est
+          # souhaitable, mais c'est une décision Tech Lead / front — elle implique
+          # un reformatage global du projet, à faire en une PR dédiée et isolée.
+          flutter-version: 3.24.1
           channel: stable
           cache: true
 
       - name: flutter pub get
         run: flutter pub get
 
-      # Avant build_runner : on ne formate que le code écrit à la main.
+      # Avant build_runner : on ne vérifie que le code écrit à la main.
+      # `--output=none` est indispensable : sans lui, `dart format` RÉÉCRIT les
+      # fichiers sur place (le flag --set-exit-if-changed ne pilote que le code
+      # de sortie, pas l'écriture). On veut une vérification, pas une modification.
       - name: dart format — vérification
-        run: dart format --set-exit-if-changed .
+        run: dart format --output=none --set-exit-if-changed .
 
       - name: build_runner (freezed · json_serializable · drift)
         run: dart run build_runner build --delete-conflicting-outputs
