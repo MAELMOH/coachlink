@@ -1,0 +1,50 @@
+# --- Général / OS / éditeurs ---
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.vscode/
+.idea/
+
+# --- Env & secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# --- Node / JS-TS (mobile RN/Expo, backend Node éventuel) ---
+node_modules/
+dist/
+build/
+coverage/
+.expo/
+.expo-shared/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Mobile natif (au cas où) ---
+*.jks
+*.keystore
+ios/Pods/
+android/.gradle/
+android/app/build/
+*.ipa
+*.apk
+*.aab
+
+# --- Python (si backend Python) ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# --- Docker ---
+*.override.yml
+
+# NOTE: ce fichier sera affiné une fois la stack figée dans ARCHITECTURE.md
+# (ajout des ignores spécifiques au framework mobile / backend choisi).
