@@ -55,19 +55,19 @@ class DriftSyncQueue implements SyncQueue {
     DateTime now, {
     int limit = 50,
   }) async {
-    final List<PendingOperationData> rows = await (_db
-            .select(_db.pendingOperations)
-          ..where((PendingOperations t) => t.isDead.equals(false))
-          ..where(
-            (PendingOperations t) =>
-                t.nextAttemptAt.isNull() |
-                t.nextAttemptAt.isSmallerOrEqualValue(now),
-          )
-          ..orderBy(<OrderClauseGenerator<PendingOperations>>[
-            (PendingOperations t) => OrderingTerm.asc(t.sequence),
-          ])
-          ..limit(limit))
-        .get();
+    final List<PendingOperationData> rows =
+        await (_db.select(_db.pendingOperations)
+              ..where((PendingOperations t) => t.isDead.equals(false))
+              ..where(
+                (PendingOperations t) =>
+                    t.nextAttemptAt.isNull() |
+                    t.nextAttemptAt.isSmallerOrEqualValue(now),
+              )
+              ..orderBy(<OrderClauseGenerator<PendingOperations>>[
+                (PendingOperations t) => OrderingTerm.asc(t.sequence),
+              ])
+              ..limit(limit))
+            .get();
     return rows.map(_fromRow).toList(growable: false);
   }
 
@@ -143,13 +143,13 @@ class DriftSyncQueue implements SyncQueue {
 
   @override
   Future<List<PendingOperation>> deadOperations() async {
-    final List<PendingOperationData> rows = await (_db
-            .select(_db.pendingOperations)
-          ..where((PendingOperations t) => t.isDead.equals(true))
-          ..orderBy(<OrderClauseGenerator<PendingOperations>>[
-            (PendingOperations t) => OrderingTerm.asc(t.sequence),
-          ]))
-        .get();
+    final List<PendingOperationData> rows =
+        await (_db.select(_db.pendingOperations)
+              ..where((PendingOperations t) => t.isDead.equals(true))
+              ..orderBy(<OrderClauseGenerator<PendingOperations>>[
+                (PendingOperations t) => OrderingTerm.asc(t.sequence),
+              ]))
+            .get();
     return rows.map(_fromRow).toList(growable: false);
   }
 
@@ -177,8 +177,8 @@ class DriftSyncQueue implements SyncQueue {
   PendingOperation _fromRow(PendingOperationData row) {
     return PendingOperation(
       id: row.id,
-      entityType: SyncEntityType.fromWire(row.entityType) ??
-          SyncEntityType.userProfile,
+      entityType:
+          SyncEntityType.fromWire(row.entityType) ?? SyncEntityType.userProfile,
       entityId: row.entityId,
       kind: SyncOperationKind.fromWire(row.operation),
       method: row.method,
@@ -200,8 +200,7 @@ class DriftSyncQueue implements SyncQueue {
 /// (ordre FIFO, rejeu, backoff, idempotence) sans SQLite ni Keychain.
 class InMemorySyncQueue implements SyncQueue {
   final List<PendingOperation> _operations = <PendingOperation>[];
-  final StreamController<int> _pendingCount =
-      StreamController<int>.broadcast();
+  final StreamController<int> _pendingCount = StreamController<int>.broadcast();
   int _sequence = 0;
 
   List<PendingOperation> get snapshot =>
@@ -220,13 +219,12 @@ class InMemorySyncQueue implements SyncQueue {
     DateTime now, {
     int limit = 50,
   }) async {
-    final List<PendingOperation> due = _operations
-        .where((PendingOperation op) => op.isDue(now))
-        .toList()
-      ..sort(
-        (PendingOperation a, PendingOperation b) =>
-            a.sequence.compareTo(b.sequence),
-      );
+    final List<PendingOperation> due =
+        _operations.where((PendingOperation op) => op.isDue(now)).toList()
+          ..sort(
+            (PendingOperation a, PendingOperation b) =>
+                a.sequence.compareTo(b.sequence),
+          );
     return due.take(limit).toList(growable: false);
   }
 

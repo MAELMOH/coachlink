@@ -18,10 +18,7 @@ import 'package:crypto/crypto.dart';
 /// reparer. Procedure complete : `docs/mobile/certificate-pinning.md`.
 class SpkiPinValidator {
   SpkiPinValidator(List<String> pins)
-      : _pins = pins
-            .map(_normalize)
-            .where((String p) => p.isNotEmpty)
-            .toSet();
+      : _pins = pins.map(_normalize).where((String p) => p.isNotEmpty).toSet();
 
   final Set<String> _pins;
 

@@ -48,7 +48,8 @@ abstract final class K {
   static const Key coachInviteModePresentiel =
       Key('coach-invite-mode-presentiel');
   static const Key coachInviteModeDistance = Key('coach-invite-mode-distance');
-  static const Key coachClientProgressChart = Key('coach-client-progress-chart');
+  static const Key coachClientProgressChart =
+      Key('coach-client-progress-chart');
 
   // --- Invitation cote client ---
   static const Key inviteAcceptCodeField = Key('invite-accept-code-field');
@@ -64,7 +65,8 @@ abstract final class K {
 
   // --- Bibliotheque d'exercices ---
   static const Key exerciseSearchField = Key('exercise-search-field');
-  static Key exerciseCard(String exerciseId) => Key('exercise-card-$exerciseId');
+  static Key exerciseCard(String exerciseId) =>
+      Key('exercise-card-$exerciseId');
   static const Key exerciseCreateSubmit = Key('exercise-create-submit');
   static const Key exerciseMediaUpload = Key('exercise-media-upload');
 

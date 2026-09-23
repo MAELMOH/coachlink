@@ -24,6 +24,7 @@ class AppConfig {
     required this.spkiPins,
     required this.connectTimeout,
     required this.receiveTimeout,
+    this.useFakeBackend = false,
   });
 
   /// Construit la configuration depuis les `--dart-define`.
@@ -50,8 +51,17 @@ class AppConfig {
     );
     const rawPins = String.fromEnvironment('COACHLINK_SPKI_PINS');
 
+    // Sources simulees tant que `back` n'expose pas son OpenAPI. Par defaut
+    // actif en dev uniquement : un build staging/prod qui tomberait sur des
+    // donnees factices serait un incident, pas une commodite.
+    const fakeBackend = bool.fromEnvironment(
+      'COACHLINK_FAKE_API',
+      defaultValue: true,
+    );
+
     return AppConfig(
       environment: environment,
+      useFakeBackend: fakeBackend && environment == AppEnvironment.dev,
       apiBaseUrl: apiBaseUrl,
       webSocketUrl: wsUrl.isNotEmpty ? wsUrl : _deriveWsUrl(apiBaseUrl),
       deepLinkHost: deepLinkHost,
@@ -77,6 +87,9 @@ class AppConfig {
 
   final Duration connectTimeout;
   final Duration receiveTimeout;
+
+  /// Bascule sur les repositories simules (`Fake*Repository`).
+  final bool useFakeBackend;
 
   bool get isProduction => environment == AppEnvironment.prod;
 
@@ -109,6 +122,7 @@ class AppConfig {
     List<String>? spkiPins,
     Duration? connectTimeout,
     Duration? receiveTimeout,
+    bool? useFakeBackend,
   }) {
     return AppConfig(
       environment: environment ?? this.environment,
@@ -118,6 +132,7 @@ class AppConfig {
       spkiPins: spkiPins ?? this.spkiPins,
       connectTimeout: connectTimeout ?? this.connectTimeout,
       receiveTimeout: receiveTimeout ?? this.receiveTimeout,
+      useFakeBackend: useFakeBackend ?? this.useFakeBackend,
     );
   }
 }
