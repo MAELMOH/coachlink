@@ -111,12 +111,39 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 >    RLS/intégration se *skippaient* silencieusement. Rien à corriger côté code.
 
 ### 2.2 Auth & lien coach-client
-- [ ] `POST /auth/register` (role coach|client), `POST /auth/login`, `POST /auth/refresh` (rotatif), `POST /auth/logout`
-- [ ] Argon2id + JWT access 15 min / refresh 30 j révocable
-- [ ] `POST /coach/invitations` (code 8 car. + deep link), `GET /coach/invitations`
-- [ ] `POST /invitations/{code}/accept` → crée `coach_client_link` (mode présentiel|distance)
-- [ ] `GET /coach/clients` (vue multi-clients), `PATCH /links/{id}` (pause/révocation)
-- [ ] Dépendance d'autorisation `require_active_link(coach, client)` + écriture `audit_log`
+> **Vérifié en exécution le 2026-09-23** : 219 tests, 0 échec (35 nouveaux), `ruff` +
+> `ruff format` + `mypy app/domain` + `alembic check` propres. Commit `103df12`.
+
+- [x] `POST /auth/register` (role coach|client), `POST /auth/login`, `POST /auth/refresh` (rotatif), `POST /auth/logout`
+      — refus < 16 ans sur `birth_date` (§5.2), e-mail insensible à la casse (citext),
+      compte inconnu et mot de passe faux **indiscernables** (même code, même coût
+      Argon2) pour ne pas offrir un oracle d'énumération de comptes.
+- [x] Argon2id + JWT access 15 min / refresh 30 j révocable
+      — refresh **opaque** (jamais un JWT : il doit être révocable), stocké en SHA-256
+      seulement. Rotation avec détection de vol : rejouer un token déjà échangé révoque
+      toute la famille.
+- [x] `POST /coach/invitations` (code 8 car.), `GET /coach/invitations`
+      — alphabet sans O/0/I/1 (les codes se lisent à voix haute). **Deep link : pas
+      encore fait**, à caler avec `front` (schéma d'URL + `go_router`) — ajouté en 3.3.
+- [x] `POST /invitations/{code}/accept` → crée `coach_client_link` (mode présentiel|distance)
+      — consommation **atomique** en base (`consume_invitation`), donc deux clients qui
+      soumettent le même code en concurrence ne peuvent pas créer deux liens. Démarre
+      aussi l'essai 10 j à la création du lien, pas à l'inscription (§7).
+- [x] `GET /coach/clients` (vue multi-clients), `PATCH /links/{id}` (pause/révocation)
+      — pagination cursor sur UUID v7 (§8). Révocation **définitive** : repasser en
+      actif exige une nouvelle invitation acceptée par le client, pas un bouton côté coach.
+- [x] Dépendance d'autorisation `require_active_link(coach, client)` + écriture `audit_log`
+      — `audit_log` en INSERT seul, identifiants uniquement, jamais les valeurs lues.
+- [x] _(avancé depuis 2.7, feu vert chef de projet)_ Garde de consentement bloquante
+      `403 CONSENT_REQUIRED` + `GET/POST /me/consents` — voir 2.7.
+
+> **Ce que l'exécution a révélé (invisible à la relecture) :** la RLS rendait
+> l'authentification **impossible**. Toutes les policies comparent à
+> `current_setting('app.current_user_id')`, NULL tant que l'appelant n'est pas
+> authentifié : le SELECT de login renvoyait 0 ligne, et refresh/logout ne retrouvaient
+> jamais leur token. Corrigé par 3 fonctions `SECURITY DEFINER` étroites (migration
+> `9c3d1e7b45a2`), dans la continuité du `resolve_invitation` déjà présent, plutôt
+> qu'en élargissant les policies pour toutes les requêtes. Détail des 6 bugs : `103df12`.
 
 ### 2.3 Exercices & programmes
 - [ ] Script de seed du catalogue depuis **free-exercise-db (Unlicense)**, images rapatriées
@@ -151,8 +178,21 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 - [ ] Rappels de séance planifiés (Celery beat) + `GET /notifications`
 
 ### 2.7 RGPD & facturation
-- [ ] `GET/POST /me/consents` (tos, privacy, health_data, progress_photos, marketing)
-- [ ] Garde globale `403 CONSENT_REQUIRED` tant que les consentements obligatoires manquent
+- [x] `GET/POST /me/consents` (tos, privacy, health_data, progress_photos, marketing)
+      — **fait en avance avec 2.2** (feu vert chef de projet) : lignes **append-only**
+      avec version du document et hash d'IP, jamais de mise à jour en place — c'est
+      l'historique qui constitue la preuve de conformité.
+- [x] Garde globale `403 CONSENT_REQUIRED` tant que les consentements obligatoires manquent
+      — **deny par défaut, pas par discipline** : les routers métier portent
+      `dependencies=[Depends(require_consent)]`, et `create_app()` appelle
+      `assert_consent_gate_complete()`, qui **fait échouer le démarrage** en nommant
+      toute route ni exemptée ni gardée. Oublier la dépendance devient un crash au
+      premier lancement, pas un incident RGPD silencieux en production.
+      `/me`, `/me/consents`, `/me/data-export` et `/me/delete-account` restent hors
+      garde : un utilisateur qui n'a rien accordé doit pouvoir accorder, exporter et
+      effacer (Art. 15/17/20). Sur-bloquer est aussi grave que sous-bloquer.
+      Le sweep de la QA (`tests/integration/test_consent_gate.py`) passe — il ne
+      testait **rien** jusqu'ici, voir la note ci-dessous.
 - [ ] Service d'envelope encryption (KEK/DEK, AES-256-GCM, AAD `table:row:column`) + rotation
 - [ ] `POST /me/data-export` → ZIP JSON+médias, lien pré-signé 24 h (Celery)
 - [ ] `POST /me/delete-account` → rétractation 7 j puis purge physique + **crypto-shredding**
@@ -185,6 +225,10 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 ### 3.3 Parcours coach
 - [ ] Dashboard multi-clients (état de chaque client, séances de la semaine, alertes d'inactivité)
 - [ ] Invitation client : génération/partage du code et du lien, choix présentiel ou à distance
+      — _(note `back`, 2026-09-23)_ l'API est prête : `POST /coach/invitations` renvoie
+      un code de 8 caractères, `POST /invitations/{code}/accept` le consomme. **Le deep
+      link reste à définir ensemble** (schéma d'URL + route `go_router`) ; dis-moi le
+      format que tu veux et j'ajoute le lien complet dans la réponse de l'API.
 - [ ] Fiche client : mensurations, photos (si partagées), performances, séances réalisées
 - [ ] Éditeur de programme : séances, exercices, séries/reps/charge/repos/tempo, réordonnancement
 - [ ] Bibliothèque d'exercices : recherche, filtres muscle/équipement, détail avec média
@@ -242,6 +286,44 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 ## Journal des décisions
 
 _(Tech Lead / chaque agent : consigner ici les décisions importantes avec la date et la justification)_
+
+- **2026-09-23 [Back]** Section 2.2 (auth & lien coach-client) terminée, + la garde de
+  consentement RGPD avancée depuis 2.7 sur feu vert du chef de projet — les routes
+  métier naissent conformes plutôt que d'accumuler une dette qu'on rattraperait trois
+  sections plus loin. Commit `103df12`. 219 tests, 0 échec.
+
+  **Décision structurante : la garde de consentement refuse par défaut.** Un router
+  métier porte `Depends(require_consent)`, et `create_app()` vérifie au démarrage que
+  *toute* route est soit exemptée explicitement, soit gardée — sinon l'application
+  refuse de démarrer en nommant les routes fautives. C'est la différence entre une
+  règle qu'on respecte par discipline et une règle qu'on ne peut pas enfreindre : la
+  route ajoutée en vitesse un vendredi soir casse le démarrage en local au lieu de
+  traiter des données de santé sans base légale en production.
+
+  **Ce que l'exécution a révélé et qu'aucune relecture n'aurait vu** — la RLS rendait
+  l'authentification **impossible**. Toutes les policies comparent à
+  `current_setting('app.current_user_id')`, qui est NULL tant que l'appelant n'est pas
+  authentifié : le SELECT de login renvoyait zéro ligne, refresh et logout ne
+  retrouvaient jamais leur token. Trois fonctions `SECURITY DEFINER` étroites
+  (migration `9c3d1e7b45a2`) règlent les trois moments où une requête n'a
+  légitimement pas encore de principal — login, refresh/logout, redemption d'un code
+  d'invitation — dans la continuité du `resolve_invitation` déjà écrit en 2.1. Le choix
+  alternatif (élargir les policies) aurait rendu la table `user_account` lisible par le
+  rôle applicatif pour **toutes** les requêtes, pas seulement les trois concernées.
+
+  5 autres bugs réels, tous trouvés en exécutant : `INSERT ... RETURNING` déclenche la
+  policy SELECT (l'inscription échouait alors que la policy INSERT est `WITH CHECK
+  (true)`) ; la révocation de famille de tokens volés était annulée par le rollback de
+  sa propre requête en échec ; `is not UserRole.CLIENT` sur une colonne `String(16)`
+  empêchait tout client d'accepter une invitation ; **le sweep de consentement de la QA
+  ne testait rien** (FastAPI ≥ 0.13x aplatit les routers inclus paresseusement, donc
+  parcourir `app.routes` ne voit que des placeholders et zéro endpoint) ; les tests
+  d'API partageaient le moteur SQLAlchemy global, créé dans une boucle asyncio déjà
+  fermée. Détail complet dans le message de commit.
+
+  **Reste à faire, signalé plutôt que caché** : le *deep link* d'invitation (partie
+  mobile du `POST /coach/invitations`) n'est pas fait — il dépend du schéma d'URL et
+  de `go_router` côté `front`, c'est noté en 3.3.
 
 - **2026-09-23 [Back]** Section 2.1 (socle) terminée et **vérifiée en exécution**, pas
   seulement relue. Le constat de départ : tout le code du socle était écrit et le lint
