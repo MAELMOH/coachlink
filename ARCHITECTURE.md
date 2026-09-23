@@ -286,7 +286,20 @@ Le reste de l'application ne connaît **que** le `Protocol`. Changer de prestata
 
 - **Client** : `trial_ends_at = created_at + 10 jours` à la création du lien coach-client. Après expiration sans abonnement → **mode lecture seule** (consultation du programme en cours et de l'historique, mais plus de log de séance ni de messagerie). On ne coupe jamais l'accès à ses propres données — c'est aussi une exigence RGPD.
 - **Coach** : gratuit. Commission mensuelle par **client actif**.
-- **Définition de « client actif »** (règle à figer avec le chef de projet, implémentée comme une fonction pure et testable `is_client_active(link, month) -> bool`) : lien `active` **et** au moins une séance loguée **ou** une mesure enregistrée **ou** un message échangé sur le mois civil. Un job Celery mensuel matérialise `active_client_snapshot` → idempotent, rejouable, auditable.
+- **Définition de « client actif » — TRANCHÉE par le chef de projet le 2026-09-23** (cf. ADR-011,
+  `docs/specs-fonctionnelles.md` §2.3), implémentée comme une fonction pure et testable
+  `is_client_active(link, month) -> bool` :
+  1. le lien `coach_client_link` est `active` ce mois-là ;
+  2. le **mois de création du lien ne compte jamais** — l'éligibilité démarre le mois civil suivant
+     (pas de prorata, choix de simplicité) ;
+  3. le client n'est **pas** en période d'essai gratuit (`subscription.status != 'trialing'`) —
+     un client en essai ne génère jamais de commission, pour éviter de facturer le coach pour des
+     clients qui ne paient jamais ;
+  4. **au moins 2 événements qualifiants** sur le mois civil parmi : séance loguée `completed`,
+     mesure enregistrée, message envoyé — n'importe quelle combinaison (seuil relevé de 1 à 2 pour
+     éviter qu'un client quasi inactif déclenche une commission).
+
+  Un job Celery mensuel matérialise `active_client_snapshot` → idempotent, rejouable, auditable.
 - **Webhooks** : endpoint `/webhooks/billing` avec vérification de signature et **idempotence** par `provider_event_id`.
 
 ### Risque à remonter au chef de projet
@@ -328,3 +341,4 @@ Pour éviter la dérive : pas de paiement réel encaissé, pas de visio, pas de 
 | ADR-008 | 2026-09-22 | `BillingProvider` port + `ManualBillingProvider` au MVP | Facturation branchable sans câbler Stripe |
 | ADR-009 | 2026-09-22 | Push data-only sans PII via FCM/APNs | Seule option viable sur iOS ; minimisation stricte du payload |
 | ADR-010 | 2026-09-22 | Offline-first Drift/SQLCipher + `/sync` | Usage en salle, réseau instable (C6) |
+| ADR-011 | 2026-09-23 | Définition de « client actif » figée (§7) | Seuil ≥2 événements/mois, pas de prorata le mois de création, essai gratuit exclu — décision chef de projet |

@@ -55,20 +55,14 @@ lui imposer une double saisie (papier/oral + app) serait un frein à l'adoption.
 
 - Le coach n'a **jamais** de plafond de clients ni de mur payant sur les fonctionnalités.
 - Une commission est due par client dans l'état **« actif »** sur le mois civil écoulé.
-- **Définition de « client actif » — DÉCISION EN ATTENTE** (portée par le chef de projet, cf.
-  `ARCHITECTURE.md` §7 et ticket Jira SCRUM-1). Proposition du Tech Lead à valider ou amender :
-  > lien `active` **et** au moins une séance loguée **ou** une mesure enregistrée **ou** un message
-  > échangé sur le mois civil.
-
-  Points à trancher explicitement avant implémentation :
-  1. Cette définition convient-elle telle quelle, ou faut-il un seuil (ex. ≥ 2 séances) pour éviter
-     qu'un client quasi inactif déclenche quand même une commission ?
-  2. Le mois du **lien créé en cours de mois** compte-t-il comme actif au prorata, ou seulement à
-     partir du mois suivant ?
-  3. Un client en essai gratuit (pas encore payant) déclenche-t-il une commission coach, ou la
-     commission ne démarre-t-elle qu'une fois le client lui-même passé en abonnement payant ?
-     *(Cette question a un impact business direct — si la réponse est "oui dès l'essai", un coach
-     pourrait être facturé pour des clients qui ne paient jamais.)*
+- **Définition de « client actif » — TRANCHÉE le 2026-09-23** (chef de projet, cf. ADR-011 dans
+  `ARCHITECTURE.md` §10 et détail §7). Un client est actif un mois civil donné si, cumulativement :
+  1. son lien coach-client est `active` ce mois-là ;
+  2. ce n'est **pas** le mois de création du lien — pas de prorata, l'éligibilité démarre le mois
+     suivant ;
+  3. il n'est **pas** en période d'essai gratuit — un client en essai ne génère jamais de commission ;
+  4. il cumule **au moins 2 événements qualifiants** sur le mois (séance loguée `completed`, mesure
+     enregistrée, message envoyé — combinaison libre).
 - Le coach voit dans son dashboard un récapitulatif mensuel : nombre de clients actifs, montant de
   commission estimé/facturé, historique des factures (une fois `StripeBillingProvider` implémenté —
   hors MVP, cf. `ARCHITECTURE.md` §7).
@@ -254,10 +248,7 @@ qu'ajoutée directement par un agent.
 
 ## 7. Décisions produit encore ouvertes
 
-Récapitulatif (déjà trackées individuellement dans Jira SCRUM-1 et SCRUM-2) :
-
-1. **Définition précise de « client actif »** pour la commission — voir §2.3 ci-dessus, 3 sous-
-   questions à trancher.
+1. ~~Définition précise de « client actif »~~ — **tranchée le 2026-09-23**, voir §2.3 (SCRUM-1 fermé).
 2. **Stripe vs achat in-app Apple/Google** pour l'abonnement réel — voir `ARCHITECTURE.md` §7
-   « Risque à remonter au chef de projet ». Sans impact sur le MVP (`ManualBillingProvider` actif),
-   mais bloquant avant tout encaissement réel.
+   « Risque à remonter au chef de projet » (SCRUM-2, toujours ouvert). Sans impact sur le MVP
+   (`ManualBillingProvider` actif), mais bloquant avant tout encaissement réel.

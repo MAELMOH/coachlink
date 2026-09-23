@@ -21,8 +21,8 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 - [x] **[Chef de projet]** Spécifications fonctionnelles détaillées → `docs/specs-fonctionnelles.md`
       (user stories coach/client, règles métier : essai gratuit 10j, présentiel vs distance,
       commission par client actif — 3 sous-questions posées explicitement, cf. §2.3 et §7 du doc)
-- [ ] **[Chef de projet]** Trancher la définition de « client actif » proposée par le Tech Lead
-      (`ARCHITECTURE.md` §7) et le sujet IAP Apple/Google vs Stripe (§7, risque remonté)
+- [x] **[Chef de projet]** Trancher la définition de « client actif » → **fait le 2026-09-23**,
+      voir `ARCHITECTURE.md` ADR-011. Reste ouvert : IAP Apple/Google vs Stripe (§7, SCRUM-2)
 - [x] **[Tech Lead]** Choix stack mobile + backend + DB → documenté dans `ARCHITECTURE.md`
 - [x] **[Tech Lead]** Décision bibliothèque d'exercices — licences réellement vérifiées :
       ExerciseDB gratuit = **non-commercial** ❌, Wger = **CC-BY-SA share-alike** ❌,
@@ -201,6 +201,13 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 ## Journal des décisions
 
 _(Tech Lead / chaque agent : consigner ici les décisions importantes avec la date et la justification)_
+
+- **2026-09-23 [Chef de projet]** Définition de « client actif » figée (SCRUM-1 fermé) :
+  lien actif, mois de création exclu (pas de prorata), client hors essai gratuit, ≥2 événements
+  qualifiants/mois (séance complétée, mesure, message — combinaison libre, seuil relevé de 1 à 2
+  sur demande explicite pour éviter qu'un client quasi inactif déclenche une commission). Détail :
+  `ARCHITECTURE.md` ADR-011 et `docs/specs-fonctionnelles.md` §2.3. Reste ouvert : SCRUM-2
+  (Stripe vs IAP).
 
 - **2026-09-22 [Chef de projet]** Sprint 1 décidé (équipe en pause, seul le chef de projet
   travaille pour l'instant). Contenu : finir le cadrage bloquant + les fondations déjà en cours,
