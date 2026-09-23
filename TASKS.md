@@ -70,12 +70,45 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 ## Phase 2 — Backend (Agent `back`, débloqué après Phase 0)
 
 ### 2.1 Socle
-- [~] Squelette FastAPI (`app/api/v1`, `app/domain`, `app/models`, `app/schemas`, `app/services`, `app/core`)
-- [~] Config par variables d'environnement (Pydantic Settings) + `.env.example`
-- [~] SQLAlchemy 2.0 async + Alembic, migration initiale des 24 entités (§4)
-- [~] Policies PostgreSQL **Row Level Security** sur les tables client (défense en profondeur)
-- [~] Middleware : erreurs normalisées, request-id, `structlog` **sans PII**, rate limiting
-- [ ] _(ajout back)_ `app/domain/ids.py` : UUID v7 généré côté applicatif (pas natif en PG16)
+> **Vérifié en exécution le 2026-09-23** (pas seulement écrit) : `alembic upgrade head`
+> puis `downgrade base` puis `upgrade head` sur un vrai PostgreSQL 16, `alembic check`
+> sans dérive, app démarrée (`/health`, `/health/ready` avec check DB, `/openapi.json`,
+> erreurs normalisées), `ruff check` + `ruff format --check` + `mypy app/domain` propres,
+> **18/18 tests RLS verts**. Détail des bugs trouvés : commit `fc02349`.
+
+- [x] Squelette FastAPI (`app/api/v1`, `app/domain`, `app/models`, `app/schemas`, `app/services`, `app/core`)
+- [x] Config par variables d'environnement (Pydantic Settings) + `.env.example`
+      — bug corrigé : `COACHLINK_CORS_ORIGINS=` vide faisait planter le démarrage
+      (pydantic-settings JSON-décode avant les validators) ⇒ `cp .env.example .env`
+      donnait une app qui ne bootait pas. Corrigé via `Annotated[list[str], NoDecode]`.
+- [x] SQLAlchemy 2.0 async + Alembic, migration initiale des 24 entités (§4)
+      — la chaîne de migrations n'avait jamais été appliquée. 2 bugs corrigés :
+      `user_account.email` déclaré `Text` dans le modèle mais converti en `citext` par
+      la migration (dérive `alembic check`, et le prochain `--autogenerate` aurait
+      rétabli la sensibilité à la casse sur les e-mails) ; extension `citext` supposée
+      présente alors que seul le 1er démarrage du conteneur dev l'installe (CI,
+      testcontainer et Scaleway échouaient) — la migration porte désormais ses prérequis.
+- [x] Policies PostgreSQL **Row Level Security** sur les tables client (défense en profondeur)
+      — **la seconde barrière est maintenant réellement démontrée**, elle ne l'était pas :
+      la suite construisait son schéma avec `Base.metadata.create_all()`, qui n'émet
+      aucune policy. Le schéma de test vient désormais d'Alembic (`tests/support/schema.py`),
+      donc chaque run reteste aussi la chaîne de migrations. Prouvé en SQL brut sous le
+      rôle `coachlink_app` (NOSUPERUSER/NOBYPASSRLS) : lecture ET écriture croisées
+      coach A → client de coach B bloquées, `paused`/`revoked`/`pending` coupent l'accès
+      du coach, le client garde l'accès à ses propres données.
+- [x] Middleware : erreurs normalisées, request-id, `structlog` **sans PII**, rate limiting
+- [x] _(ajout back)_ `app/domain/ids.py` : UUID v7 généré côté applicatif (pas natif en PG16)
+      — RFC 9562, compteur monotone intra-milliseconde (requis par la pagination cursor
+      §8), `mypy --strict` OK, 12 tests unitaires verts. **SCRUM-4 → Terminé.**
+
+> **Notes d'environnement (pour `devops`)** — deux points rencontrés sur la machine de dev :
+> 1. Le port **5432 était déjà pris par un PostgreSQL installé sur l'hôte Windows**, qui
+>    répondait à la place du conteneur (échec opaque `ConnectionDoesNotExistError`).
+>    Contourné en local via `POSTGRES_PORT=55432` dans le `.env` racine (non committé,
+>    la variable existait déjà dans `docker-compose.yml`). À documenter dans le README.
+> 2. `testcontainers` / `psycopg` / `pytest-xdist` sont déclarés dans les extras `dev`
+>    du `pyproject.toml` mais n'étaient pas installés dans le venv local : les tests
+>    RLS/intégration se *skippaient* silencieusement. Rien à corriger côté code.
 
 ### 2.2 Auth & lien coach-client
 - [ ] `POST /auth/register` (role coach|client), `POST /auth/login`, `POST /auth/refresh` (rotatif), `POST /auth/logout`
@@ -209,6 +242,34 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 ## Journal des décisions
 
 _(Tech Lead / chaque agent : consigner ici les décisions importantes avec la date et la justification)_
+
+- **2026-09-23 [Back]** Section 2.1 (socle) terminée et **vérifiée en exécution**, pas
+  seulement relue. Le constat de départ : tout le code du socle était écrit et le lint
+  était propre, mais **rien n'avait jamais été exécuté** — aucune migration appliquée sur
+  une vraie base, et la suite de tests construisait son schéma avec
+  `Base.metadata.create_all()`, qui n'émet ni policy RLS, ni `citext`, ni trigger. Les
+  18 tests RLS étaient donc skippés ou rouges : la « seconde barrière », que
+  `ARCHITECTURE.md` §4 désigne comme le risque n°1 du projet, n'avait jamais été
+  démontrée. Elle l'est maintenant (commit `fc02349`).
+
+  **Décision structurante** : le schéma de test est désormais construit par **Alembic**
+  et non par `create_all` (`tests/support/schema.py`). `create_all` ne connaît que les
+  tables et les index ; tout ce qui protège réellement les données (policies RLS,
+  `FORCE ROW LEVEL SECURITY`, `citext` sur l'e-mail, trigger `updated_at` dont dépend
+  `GET /sync?since=`, fonction `resolve_invitation`) vit en dehors des métadonnées ORM.
+  Effet de bord voulu : chaque run de tests reteste aussi la chaîne de migrations, donc
+  une migration qui ne s'applique pas proprement est vue ici et pas en staging.
+
+  4 bugs réels trouvés **parce qu'on a exécuté** (détail dans la section 2.1) : boot
+  impossible avec un `.env` issu de `.env.example` ; dérive modèle/migration sur
+  `email` qui aurait silencieusement rétabli la sensibilité à la casse ; extension
+  `citext` non créée par la migration ; tests RLS visant une table `"user"` qui n'existe
+  pas (elle s'appelle `user_account`) et utilisant `SET LOCAL app.current_role`, qui est
+  une **erreur de syntaxe** en PostgreSQL (`current_role` est un mot réservé) — le code
+  applicatif, lui, utilisait déjà `set_config()` et n'était pas touché.
+
+  **Jira** : SCRUM-4 (UUID v7) peut passer en *Terminé*, SCRUM-3 (socle) également.
+  Pas d'accès Jira vérifié depuis cette session — le chef de projet resynchronise.
 
 - **2026-09-23 [DevOps]** Reprise de session (agent DevOps précédent arrêté, non récupérable).
   État vérifié à froid : structure mono-repo conforme à `ARCHITECTURE.md` §3, remote GitHub
