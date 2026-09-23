@@ -32,14 +32,29 @@ async def _table_exists(conn, name: str) -> bool:
 async def _as_user(conn, user_id, role: str = "coach") -> None:
     """Establish the request context the policies read.
 
-    Mirrors what ``back``'s ``get_session`` dependency does per transaction:
-    ``SET LOCAL app.current_user_id`` / ``app.current_role``. ``SET LOCAL`` is
+    Mirrors exactly what ``back``'s ``get_session`` dependency does per transaction
+    (``app.core.db.apply_rls_context``): ``set_config(..., is_local => true)``, which is
     transaction-scoped, so this must be called inside an open transaction.
+
+    ``set_config`` rather than ``SET LOCAL`` is not a stylistic choice. ``SET`` takes no
+    bind parameters, and ``SET LOCAL app.current_role = '...'`` is in fact a **syntax
+    error** — ``current_role`` is a reserved SQL keyword, and PostgreSQL's grammar rejects
+    it even behind the ``app.`` prefix. ``set_config()`` is an ordinary function call and
+    is immune to both problems. Using the production helper's mechanism here also means
+    this suite fails if that mechanism ever stops working.
     """
     import sqlalchemy
 
-    await conn.execute(sqlalchemy.text(f"SET LOCAL app.current_user_id = '{user_id}'"))
-    await conn.execute(sqlalchemy.text(f"SET LOCAL app.current_role = '{role}'"))
+    from app.core.db import RLS_ROLE_SETTING, RLS_USER_SETTING
+
+    await conn.execute(
+        sqlalchemy.text("SELECT set_config(:k, :v, true)"),
+        {"k": RLS_USER_SETTING, "v": str(user_id)},
+    )
+    await conn.execute(
+        sqlalchemy.text("SELECT set_config(:k, :v, true)"),
+        {"k": RLS_ROLE_SETTING, "v": role},
+    )
 
 
 @pytest.fixture
@@ -52,8 +67,16 @@ async def isolation_fixture(owner_engine, app_engine, schema_ready):
     import sqlalchemy
 
     from app.domain.ids import uuid7
+    from app.models.identity import User
 
-    required = ("user", "coach_client_link", "body_measurement")
+    # Taken from the model rather than hardcoded: "user" is a reserved word in
+    # PostgreSQL, so `back` named the table `user_account`. Reading __tablename__
+    # here means a future rename shows up as a failing query, not as a silently
+    # skipped file — this suite covers the project's number-one risk and must
+    # never quietly disappear from the report.
+    users_table = User.__tablename__
+
+    required = (users_table, "coach_client_link", "body_measurement")
     async with owner_engine.connect() as conn:
         for table in required:
             if not await _table_exists(conn, table):
@@ -79,7 +102,7 @@ async def isolation_fixture(owner_engine, app_engine, schema_ready):
         ):
             await conn.execute(
                 sqlalchemy.text(
-                    'INSERT INTO "user" (id, email, password_hash, role, first_name, '
+                    f"INSERT INTO {users_table} (id, email, password_hash, role, first_name, "
                     "last_name) VALUES (:id, :email, :pwd, :role, :fn, :ln)"
                 ),
                 {
@@ -123,7 +146,7 @@ async def isolation_fixture(owner_engine, app_engine, schema_ready):
             {"ids": [ids["link_a"], ids["link_b"]]},
         )
         await conn.execute(
-            sqlalchemy.text('DELETE FROM "user" WHERE id = ANY(:ids)'),
+            sqlalchemy.text(f"DELETE FROM {users_table} WHERE id = ANY(:ids)"),
             {
                 "ids": [
                     ids["coach_a"],

@@ -23,7 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,7 +45,11 @@ class User(PkMixin, TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "user_account"  # "user" is reserved in PostgreSQL
 
     # citext keeps e-mail uniqueness case-insensitive without a functional index.
-    email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    # The type must be declared here, not only patched by the migration: with `Text`
+    # in the model, `alembic check` reports drift and the next `--autogenerate` emits
+    # an "ALTER COLUMN email TYPE text" that would silently restore case sensitivity
+    # — i.e. let "Bob@x.fr" and "bob@x.fr" become two accounts.
+    email: Mapped[str] = mapped_column(CITEXT, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[UserRole] = mapped_column(String(16), nullable=False, index=True)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)

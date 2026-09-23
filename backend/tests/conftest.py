@@ -114,11 +114,47 @@ def frozen_clock():
 # ---------------------------------------------------------------------------
 
 
+def _run_privileged(owner_url: str, statements: list[str]) -> None:
+    """Execute owner-level DDL/GRANTs outside a transaction (roles need AUTOCOMMIT)."""
+    import sqlalchemy
+
+    engine = sqlalchemy.create_engine(database.to_psycopg(owner_url), isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as conn:
+            for statement in statements:
+                conn.execute(sqlalchemy.text(statement))
+    finally:
+        engine.dispose()
+
+
 @pytest.fixture(scope="session")
 def db_endpoint() -> database.DbEndpoint:
+    """The test database, with the unprivileged application role guaranteed to exist.
+
+    The role is bootstrapped *here* rather than in ``app_url`` on purpose. The RLS
+    migration issues ``CREATE POLICY ... TO coachlink_app``, which fails outright if the
+    role is missing, and ``test_app_role_is_not_superuser_and_cannot_bypass_rls`` asks
+    ``pg_roles`` about it while holding only an owner connection. Creating it lazily in
+    ``app_url`` made both depend on the order fixtures happen to be requested in.
+    """
     endpoint = database.resolve_endpoint()
     if endpoint is None:
         pytest.skip(database.skip_reason())
+
+    if not os.environ.get("TEST_DATABASE_URL_APP"):
+        _run_privileged(
+            endpoint.url,
+            [
+                database.ENSURE_APP_ROLE_SQL,
+                f"GRANT USAGE ON SCHEMA public TO {database.APP_ROLE}",
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public "
+                f"TO {database.APP_ROLE}",
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, "
+                f"DELETE ON TABLES TO {database.APP_ROLE}",
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES "
+                f"TO {database.APP_ROLE}",
+            ],
+        )
     return endpoint
 
 
@@ -130,65 +166,40 @@ def owner_url(db_endpoint: database.DbEndpoint) -> str:
 
 @pytest.fixture(scope="session")
 def app_url(db_endpoint: database.DbEndpoint) -> str:
-    """Unprivileged URL (``coachlink_app``) — the only one RLS tests may use.
-
-    The role is created on the fly when the environment did not provide it, so the suite
-    works both against a CI service container and a throwaway testcontainer.
-    """
-    sqlalchemy = pytest.importorskip("sqlalchemy")
-
+    """Unprivileged URL (``coachlink_app``) — the only one RLS tests may use."""
     provided = os.environ.get("TEST_DATABASE_URL_APP")
     if provided:
         return database.to_asyncpg(provided)
-
-    engine = sqlalchemy.create_engine(
-        database.to_psycopg(db_endpoint.url), isolation_level="AUTOCOMMIT"
-    )
-    try:
-        with engine.connect() as conn:
-            conn.execute(sqlalchemy.text(database.ENSURE_APP_ROLE_SQL))
-            db_name = conn.execute(sqlalchemy.text("SELECT current_database()")).scalar_one()
-            conn.execute(
-                sqlalchemy.text(f'GRANT CONNECT ON DATABASE "{db_name}" TO {database.APP_ROLE}')
-            )
-            conn.execute(sqlalchemy.text(f"GRANT USAGE ON SCHEMA public TO {database.APP_ROLE}"))
-            conn.execute(
-                sqlalchemy.text(
-                    "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public "
-                    f"TO {database.APP_ROLE}"
-                )
-            )
-            conn.execute(
-                sqlalchemy.text(
-                    "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, "
-                    f"DELETE ON TABLES TO {database.APP_ROLE}"
-                )
-            )
-    finally:
-        engine.dispose()
-
     return database.with_credentials(db_endpoint.url, database.APP_ROLE, database.APP_ROLE_PASSWORD)
 
 
 @pytest.fixture(scope="session")
 def schema_ready(owner_url: str) -> bool:
-    """Create the schema from ``Base.metadata`` once per session.
+    """Build the schema once per session by running the **Alembic migrations**.
 
-    Skips cleanly while ``back`` has not landed ``app/models`` yet, so the DB fixtures
-    can already be wired and exercised by the RLS role checks.
+    Not ``Base.metadata.create_all``: that emits tables and indexes only, leaving the
+    database with zero RLS policies, no citext e-mail, no ``updated_at`` trigger and no
+    ``resolve_invitation`` function. See ``tests/support/schema.py`` for the full
+    rationale. As a bonus, the migration chain is exercised on every run.
     """
     if not is_available("app.models.base", "Base"):
         pytest.skip("app/models not available yet (waiting on `back`)")
 
-    sqlalchemy = pytest.importorskip("sqlalchemy")
-    from app.models.base import Base
+    from tests.support import schema
 
-    engine = sqlalchemy.create_engine(database.to_psycopg(owner_url))
-    try:
-        with engine.begin() as conn:
-            Base.metadata.create_all(conn)
-    finally:
-        engine.dispose()
+    schema.upgrade_to_head(owner_url)
+
+    # Tables created by the migration are covered by ALTER DEFAULT PRIVILEGES above,
+    # but re-granting is idempotent and keeps the suite working against a pre-existing
+    # CI database whose defaults were never set.
+    _run_privileged(
+        owner_url,
+        [
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public "
+            f"TO {database.APP_ROLE}",
+            f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {database.APP_ROLE}",
+        ],
+    )
     return True
 
 

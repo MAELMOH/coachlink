@@ -7,10 +7,10 @@ canonical list of variables lives in ``backend/.env.example``.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 __all__ = ["Settings", "get_settings"]
 
@@ -105,7 +105,13 @@ class Settings(BaseSettings):
     log_json: bool = True
     sentry_dsn: str | None = None
 
-    cors_origins: list[str] = Field(default_factory=list)
+    #: ``NoDecode`` is load-bearing, not decoration. Without it pydantic-settings
+    #: JSON-decodes any complex-typed value *before* the validators run, so the
+    #: comma-separated form documented in ``.env.example`` — and in particular the
+    #: empty ``COACHLINK_CORS_ORIGINS=`` line, which is the correct value in prod —
+    #: raises ``SettingsError`` and the app refuses to boot. Copying `.env.example`
+    #: to `.env` must always produce a working app; that is what it is for.
+    cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     @field_validator("cors_origins", mode="before")
     @classmethod

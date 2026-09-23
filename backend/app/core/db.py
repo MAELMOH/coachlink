@@ -40,6 +40,12 @@ __all__ = [
 
 #: Names of the PostgreSQL run-time parameters read by the RLS policies.
 #: Changing either of these means rewriting every policy — treat as frozen.
+#:
+#: Trap worth knowing when debugging in psql: ``SET LOCAL app.current_role = '...'``
+#: is a **syntax error**, because ``current_role`` is a reserved SQL keyword and the
+#: grammar rejects it even behind the ``app.`` prefix. Use
+#: ``SELECT set_config('app.current_role', '...', true)`` instead — which is what
+#: :func:`apply_rls_context` does, so the application path is unaffected.
 RLS_USER_SETTING = "app.current_user_id"
 RLS_ROLE_SETTING = "app.current_role"
 

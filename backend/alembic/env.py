@@ -28,6 +28,15 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
+    """Owner URL, with an injection point for the test suite.
+
+    ``tests/support/schema.py`` migrates a throwaway database whose URL is only known
+    at runtime; it passes it through ``config.attributes`` rather than mutating the
+    process environment, which would leak into every other test in the session.
+    """
+    injected = config.attributes.get("db_url")
+    if injected:
+        return str(injected)
     return get_settings().database_migration_url
 
 
