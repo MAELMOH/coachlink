@@ -35,6 +35,9 @@ pytestmark = pytest.mark.integration
 EXEMPT_EXACT = frozenset(
     {
         "/health",
+        # Liveness AND readiness. An orchestrator probe is not a business route, and a
+        # readiness check that needed a user's consent could never succeed.
+        "/health/ready",
         "/healthz",
         "/docs",
         "/redoc",
@@ -67,11 +70,23 @@ def _concretise(path: str) -> str:
 
 
 def _business_routes(app) -> list[tuple[str, str]]:
+    """Every non-exempt endpoint, resolved through the app's own route flattening.
+
+    Iterating ``app.routes`` directly — which this helper originally did — is wrong on
+    FastAPI ≥ 0.13x: ``include_router`` stores a lazy ``_IncludedRouter`` placeholder
+    instead of copying the child routes in, so the loop sees placeholders with no
+    ``path`` and **every mounted endpoint is invisible**. The sweep then finds nothing
+    and passes for having checked nothing, which is exactly the failure mode the
+    ``test_there_are_business_routes_to_check`` guard below exists to catch.
+
+    ``app.api.consent_gate.iter_effective_routes`` wraps the same helper FastAPI uses to
+    build its OpenAPI document, so this suite and the startup check see one route list.
+    """
+    iter_effective_routes = require("app.api.consent_gate", "iter_effective_routes")
+
     routes: list[tuple[str, str]] = []
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        methods = getattr(route, "methods", None)
-        if not path or not methods or _is_exempt(path):
+    for path, methods, _dependencies in iter_effective_routes(app):
+        if _is_exempt(path):
             continue
         for method in sorted(methods - {"HEAD", "OPTIONS"}):
             routes.append((method, path))

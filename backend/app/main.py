@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
+from app.api.consent_gate import assert_consent_gate_complete
 from app.api.errors import register_exception_handlers
 from app.api.v1 import api_router
 from app.core.config import Settings, get_settings
@@ -93,6 +94,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from app.api.v1.health import router as health_router
 
     app.include_router(health_router)
+
+    # Deny-by-default consent gate (§5.2). Raises if any route is neither exempt nor
+    # gated, so "somebody forgot the dependency" is a startup crash naming the routes
+    # rather than a silent data-protection incident in production.
+    assert_consent_gate_complete(app)
 
     return app
 

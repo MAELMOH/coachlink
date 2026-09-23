@@ -24,8 +24,8 @@ from app.core.config import Settings, get_settings
 from app.core.db import apply_rls_context, get_sessionmaker
 from app.core.errors import ApiError, ErrorCode
 from app.core.security import decode_token
-from app.domain.enums import UserRole
-from app.models.identity import User
+from app.domain.enums import LinkStatus, UserRole
+from app.models.identity import CoachClientLink, User
 
 __all__ = [
     "ClockDep",
@@ -37,6 +37,7 @@ __all__ = [
     "get_clock",
     "get_current_user",
     "get_session",
+    "require_active_link",
     "require_client",
     "require_coach",
 ]
@@ -132,3 +133,38 @@ async def require_client(user: CurrentUser) -> User:
 
 CurrentCoach = Annotated[User, Depends(require_coach)]
 CurrentClient = Annotated[User, Depends(require_client)]
+
+
+async def require_active_link(
+    session: AsyncSession,
+    coach_id: UUID,
+    client_id: UUID,
+) -> CoachClientLink:
+    """The first of the two barriers of ARCHITECTURE.md §4.
+
+    A coach reaches a client's data **only** through an ``active`` link. PostgreSQL RLS
+    enforces the same rule independently (migration ``7a1c4e2b9d30``); this one exists
+    so the API answers a precise error code instead of an empty result set, and so the
+    rule is visible in the code a reviewer reads.
+
+    The distinct ``LINK_PAUSED`` / ``LINK_REVOKED`` codes are deliberate and safe: the
+    coach already knows this relationship exists, so naming its state leaks nothing and
+    lets the app say "your client paused sharing" instead of a blank screen.
+    """
+    link = await session.scalar(
+        select(CoachClientLink).where(
+            CoachClientLink.coach_id == coach_id,
+            CoachClientLink.client_id == client_id,
+        )
+    )
+    if link is None:
+        raise ApiError(ErrorCode.NO_ACTIVE_LINK, "You are not linked to this client.", details={})
+
+    status = LinkStatus(link.status)
+    if status is LinkStatus.ACTIVE:
+        return link
+    if status is LinkStatus.PAUSED:
+        raise ApiError(ErrorCode.LINK_PAUSED, "This client has paused sharing their data.")
+    if status is LinkStatus.REVOKED:
+        raise ApiError(ErrorCode.LINK_REVOKED, "This coaching relationship has ended.")
+    raise ApiError(ErrorCode.NO_ACTIVE_LINK, "This invitation has not been accepted yet.")

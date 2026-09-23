@@ -38,15 +38,28 @@ __all__ = [
 MANDATORY = (ConsentPurpose.TOS, ConsentPurpose.PRIVACY, ConsentPurpose.HEALTH_DATA)
 
 
+REFERENCE_NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
+
+
 @dataclass
 class UserStub:
-    """Minimal stand-in for the authenticated principal."""
+    """Stand-in for the authenticated principal.
+
+    Carries every field ``app.schemas.auth.UserPublic`` serialises. That is not padding:
+    a stub missing ``locale``/``timezone``/``created_at`` makes ``GET /me`` raise a
+    Pydantic validation error, and the test then fails for the shape of the double
+    rather than for the behaviour under test — which is exactly the kind of noise that
+    gets a real failure dismissed as "just the fixture".
+    """
 
     id: UUID = field(default_factory=uuid7)
     role: UserRole = UserRole.CLIENT
     email: str = "user@coachlink.test"
     first_name: str = "Test"
     last_name: str = "User"
+    locale: str = "fr"
+    timezone: str = "Europe/Paris"
+    created_at: datetime = REFERENCE_NOW
     granted_consents: frozenset[ConsentPurpose] = frozenset()
     trial_ends_at: datetime | None = None
     deleted_at: datetime | None = None
