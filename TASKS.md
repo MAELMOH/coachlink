@@ -18,8 +18,9 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 
 ## Phase 0 — Cadrage & architecture (bloquant pour les phases 2-4)
 
-- [ ] **[Chef de projet]** Spécifications fonctionnelles détaillées (user stories coach/client,
-      règles métier : essai gratuit 10j, présentiel vs distance, commission par client actif)
+- [x] **[Chef de projet]** Spécifications fonctionnelles détaillées → `docs/specs-fonctionnelles.md`
+      (user stories coach/client, règles métier : essai gratuit 10j, présentiel vs distance,
+      commission par client actif — 3 sous-questions posées explicitement, cf. §2.3 et §7 du doc)
 - [ ] **[Chef de projet]** Trancher la définition de « client actif » proposée par le Tech Lead
       (`ARCHITECTURE.md` §7) et le sujet IAP Apple/Google vs Stripe (§7, risque remonté)
 - [x] **[Tech Lead]** Choix stack mobile + backend + DB → documenté dans `ARCHITECTURE.md`
