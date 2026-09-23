@@ -201,6 +201,15 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 
 _(Tech Lead / chaque agent : consigner ici les décisions importantes avec la date et la justification)_
 
+- **2026-09-22 [Chef de projet]** Sprint 1 décidé (équipe en pause, seul le chef de projet
+  travaille pour l'instant). Contenu : finir le cadrage bloquant + les fondations déjà en cours,
+  plutôt que d'ouvrir Front/QA qui n'ont encore rien commencé. Label `sprint-1` posé sur les
+  tickets Jira concernés (pas d'API de création de sprint disponible, donc pas de vrai sprint Jira
+  créé — juste le marquage ; création du conteneur à faire manuellement dans l'UI) :
+  SCRUM-1 (client actif), SCRUM-2 (Stripe vs IAP), SCRUM-35 (spécifications fonctionnelles,
+  nouveau ticket), SCRUM-11 (repo/structure/README), SCRUM-3 + SCRUM-4 (socle backend).
+  SCRUM-12 (pipeline CI) passé en Terminé car réellement fait et vérifié.
+
 - **2026-09-22 [DevOps]** Repo git initialisé en local (`git init`, branche `main`), README.md et
   .gitignore génériques créés. Pas de remote GitHub créé/connecté pour l'instant — en attente
   d'un remote existant fourni par l'utilisateur ou d'une confirmation explicite avant d'en créer
