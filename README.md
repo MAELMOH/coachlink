@@ -83,6 +83,31 @@ Cela démarre PostgreSQL 16 (`localhost:5432`), Redis 7 (`localhost:6379`) et Mi
 Arrêter l'infra : `docker compose down` (ajouter `-v` pour repartir de zéro, ce qui **rejoue** les
 scripts de `infra/postgres/init/`).
 
+#### Dépannage
+
+**`ConnectionDoesNotExistError` / erreurs de connexion opaques, sans une seule ligne dans
+`docker compose logs postgres`.** Symptôme typique d'un **autre** PostgreSQL déjà installé sur la
+machine hôte et déjà à l'écoute sur le port 5432 : c'est lui qui répond, pas le conteneur, donc les
+logs du conteneur restent muets pendant que l'authentification échoue. Cas rencontré sur un poste
+Windows le 2026-09-23. Correctif : changer le port publié côté hôte dans le `.env` racine, la
+variable est déjà prévue dans `docker-compose.yml` —
+
+```bash
+POSTGRES_PORT=55432
+```
+
+puis `docker compose up -d` et penser à répercuter le port dans les URLs de connexion
+(`COACHLINK_DATABASE_URL`, `COACHLINK_DATABASE_MIGRATION_URL`, `TEST_DATABASE_URL`).
+Pour confirmer le diagnostic avant de changer quoi que ce soit : `docker compose port postgres 5432`
+donne le mapping réel du conteneur.
+
+**La suite de tests passe « au vert » en quelques secondes.** Vérifier qu'elle n'a pas simplement
+*skippé* les tests `integration` et `rls` : sans PostgreSQL joignable — ou sans les extras `dev`
+installés (`pip install -e ".[dev]"`, qui apporte `testcontainers` et `psycopg`) — ces tests sont
+volontairement skippés plutôt que rabattus sur SQLite, où les policies RLS n'existent pas. L'en-tête
+du rapport pytest le dit explicitement (`coachlink: NO PostgreSQL -> …`). En CI ce mode d'échec est
+bloqué par `.github/scripts/assert_db_tests_ran.py`.
+
 ### 3. Backend
 
 ```bash

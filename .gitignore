@@ -44,6 +44,9 @@ build/
 .coverage.*
 coverage.xml
 htmlcov/
+# Rapports JUnit produits par pytest (--junitxml), consommés par la CI
+# (.github/scripts/assert_db_tests_ran.py) et uploadés en artefact.
+reports/
 .tox/
 .hypothesis/
 

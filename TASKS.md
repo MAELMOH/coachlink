@@ -271,6 +271,52 @@ _(Tech Lead / chaque agent : consigner ici les décisions importantes avec la da
   **Jira** : SCRUM-4 (UUID v7) peut passer en *Terminé*, SCRUM-3 (socle) également.
   Pas d'accès Jira vérifié depuis cette session — le chef de projet resynchronise.
 
+- **2026-09-23 [DevOps]** Durcissement de la CI backend, suite aux retours de `back` (socle 2.1).
+  Quatre changements, dont deux corrigent des bugs silencieux qui rendaient la CI trompeuse :
+
+  1. **`alembic check` ajouté au job backend.** Demandé par `back` après une dérive réelle
+     (`user_account.email` en `Text` côté modèle, converti en `citext` par la migration). Le vrai
+     risque n'était pas le check rouge mais un futur `alembic revision --autogenerate` émettant un
+     `ALTER COLUMN email TYPE text`, rétablissant silencieusement la sensibilité à la casse des
+     e-mails (deux comptes `A@x.com` / `a@x.com`). Tourne sur une base **dédiée et vierge**
+     (`coachlink_migrations_check`), pas sur `coachlink_test` que la suite pytest migre déjà
+     elle-même — sinon le résultat dépendrait de l'ordre des étapes. Séquence vérifiée pour de
+     vrai en local contre le Postgres du docker-compose : 3 migrations appliquées sur base vierge
+     puis `No new upgrade operations detected`, exit 0.
+  2. **Variables d'environnement de la CI corrigées : le préfixe `COACHLINK_` est obligatoire.**
+     `Settings` (app/core/config.py) déclare `env_prefix="COACHLINK_"` avec `extra="ignore"` : les
+     variables `DATABASE_URL`, `DATABASE_URL_OWNER`, `SECRET_KEY`, `ENCRYPTION_KEK` que la CI
+     posait depuis le début **n'étaient lues par personne**, la config retombant sans bruit sur
+     ses valeurs par défaut de dev. `ENVIRONMENT: ci` était faux deux fois : mauvais préfixe, et
+     `"ci"` n'appartient pas au `Literal["dev","test","staging","prod"]`. Renommé en
+     `COACHLINK_ENVIRONMENT=test`, `COACHLINK_DATABASE_URL`,
+     `COACHLINK_DATABASE_MIGRATION_URL`, `COACHLINK_JWT_SECRET`, `COACHLINK_KEK_B64` (base64 de
+     32 octets valide, sinon le service de chiffrement refuse de démarrer). Les variables
+     `TEST_DATABASE_URL*` restent sans préfixe : elles sont lues directement par
+     `tests/support/database.py`, pas par Pydantic.
+  3. **Garde contre la « suite verte qui ne teste rien »** (`.github/scripts/assert_db_tests_ran.py`).
+     Les tests `integration`/`rls` se skippent volontairement quand aucun PostgreSQL n'est
+     joignable — bon choix (jamais de repli sur SQLite, où les policies RLS n'existent pas), mais
+     pytest renvoie alors 0. Un service container mal démarré, une variable renommée ou des
+     extras `dev` non installés (cas réellement vécu par `back` en local : `testcontainers` et
+     `psycopg` absents → 18 tests RLS skippés en silence) suffisaient donc à afficher une CI verte
+     n'ayant vérifié aucune garantie d'isolation. Le script relit le rapport JUnit et échoue si un
+     test de `tests/rls/` ou `tests/integration/` a été skippé, ou si aucun n'a tourné. Testé sur
+     4 cas (nominal, skip, répertoire vide, rapport absent).
+  4. **Bug corrigé dans `ci-sentinel.yml` : le workflow était invalide depuis sa création.** La
+     ligne `run: echo "Sentinelle CI : checkout OK..."` est un scalaire YAML nu contenant `": "`,
+     que YAML interprète comme un séparateur clé/valeur → GitHub rejetait le fichier entier. Le
+     check censé devenir le status check requis n'aurait donc jamais tourné : exactement le
+     blocage qu'il existe pour empêcher. Passé en bloc littéral `|`, et les 3 workflows sont
+     désormais validés au parse YAML. **Conséquence sur la consigne d'activation du check
+     requis** : attendre que `ci-sentinel.yml` apparaisse vert sur la PR #1 avant de le cocher
+     comme required (il ne pouvait pas l'être avant ce correctif).
+
+  Documenté aussi dans le README : section *Dépannage* (port 5432 déjà pris par un PostgreSQL
+  hôte sous Windows → `POSTGRES_PORT=55432`, piège signalé par `back` qui coûte une heure faute
+  de la moindre ligne dans les logs du conteneur ; et comment repérer une suite verte dont les
+  tests RLS ont été skippés).
+
 - **2026-09-23 [DevOps]** Reprise de session (agent DevOps précédent arrêté, non récupérable).
   État vérifié à froid : structure mono-repo conforme à `ARCHITECTURE.md` §3, remote GitHub
   `https://github.com/MAELMOH/coachlink` existant et protégé (PR obligatoire, 0 approbation

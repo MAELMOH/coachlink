@@ -69,5 +69,11 @@ jobs:
             exit 1
           fi
 
+      # Bloc littéral `|` et non scalaire nu : un scalaire YAML non quoté ne peut pas
+      # contenir la séquence ": " (deux-points + espace), que YAML lit comme un
+      # séparateur clé/valeur. Écrit d'abord en `run: echo "Sentinelle CI : ..."`, ce
+      # fichier était invalide et GitHub refusait le workflow en entier — le check
+      # requis n'aurait donc jamais tourné, exactement le blocage qu'il doit empêcher.
       - name: OK
-        run: echo "Sentinelle CI : checkout OK, repo accessible."
+        run: |
+          echo "Sentinelle CI - checkout OK, repo accessible."
