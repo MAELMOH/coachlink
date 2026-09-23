@@ -27,7 +27,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.domain.enums import DevicePlatform, NotificationType
 from app.models.base import Base, PkMixin, TimestampMixin
 
-__all__ = ["Conversation", "Message", "Notification", "DeviceToken"]
+__all__ = ["Conversation", "DeviceToken", "Message", "Notification"]
 
 
 class Conversation(PkMixin, TimestampMixin, Base):

@@ -39,10 +39,12 @@ class Settings(BaseSettings):
     # --- database ---------------------------------------------------------
     #: Connects as the *application* role: NOSUPERUSER, NOBYPASSRLS.
     #: Row Level Security is a real barrier only under such a role.
-    database_url: str = "postgresql+asyncpg://coachlink_app:devpassword@localhost:5432/coachlink"
+    database_url: str = (
+        "postgresql+asyncpg://coachlink_app:coachlink_app_dev_only@localhost:5432/coachlink"
+    )
     #: Owner/migration role, used by Alembic only.
     database_migration_url: str = (
-        "postgresql+asyncpg://coachlink_owner:devpassword@localhost:5432/coachlink"
+        "postgresql+asyncpg://coachlink_owner:coachlink_owner_dev_only@localhost:5432/coachlink"
     )
     db_pool_size: int = 10
     db_max_overflow: int = 5
@@ -74,8 +76,9 @@ class Settings(BaseSettings):
     s3_region: str = "fr-par"
     s3_bucket_media: str = "coachlink-media"
     s3_bucket_exports: str = "coachlink-exports"
-    s3_access_key: SecretStr = SecretStr("minioadmin")
-    s3_secret_key: SecretStr = SecretStr("minioadmin")
+    # Matches the MinIO credentials in the repo-root docker-compose (dev only).
+    s3_access_key: SecretStr = SecretStr("coachlink_dev")
+    s3_secret_key: SecretStr = SecretStr("coachlink_dev_only")
     s3_presign_ttl_seconds: int = 300  # 5 min (§5.1)
     s3_export_presign_ttl_seconds: int = 86400  # 24 h (§5.3)
 

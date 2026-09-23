@@ -28,14 +28,14 @@ from sqlalchemy.sql import text
 from app.core.config import Settings, get_settings
 
 __all__ = [
+    "RLS_ROLE_SETTING",
+    "RLS_USER_SETTING",
+    "apply_rls_context",
+    "dispose_engine",
     "get_engine",
     "get_sessionmaker",
-    "session_scope",
-    "apply_rls_context",
     "reset_rls_context",
-    "dispose_engine",
-    "RLS_USER_SETTING",
-    "RLS_ROLE_SETTING",
+    "session_scope",
 ]
 
 #: Names of the PostgreSQL run-time parameters read by the RLS policies.

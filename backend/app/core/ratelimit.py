@@ -11,7 +11,7 @@ from typing import Protocol
 
 from redis.asyncio import Redis
 
-__all__ = ["RateLimiter", "RedisRateLimiter", "InMemoryRateLimiter", "NullRateLimiter"]
+__all__ = ["InMemoryRateLimiter", "NullRateLimiter", "RateLimiter", "RedisRateLimiter"]
 
 
 class RateLimiter(Protocol):

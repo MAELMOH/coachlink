@@ -28,17 +28,17 @@ from app.domain.enums import UserRole
 from app.models.identity import User
 
 __all__ = [
-    "SettingsDep",
     "ClockDep",
-    "SessionDep",
-    "CurrentUser",
-    "CurrentCoach",
     "CurrentClient",
+    "CurrentCoach",
+    "CurrentUser",
+    "SessionDep",
+    "SettingsDep",
     "get_clock",
-    "get_session",
     "get_current_user",
-    "require_coach",
+    "get_session",
     "require_client",
+    "require_coach",
 ]
 
 _system_clock = SystemClock()

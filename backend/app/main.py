@@ -21,7 +21,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RateLimitMiddleware, RequestContextMiddleware
 from app.core.ratelimit import InMemoryRateLimiter, RateLimiter, RedisRateLimiter
 
-__all__ = ["create_app", "app"]
+__all__ = ["app", "create_app"]
 
 log = get_logger(__name__)
 
@@ -42,7 +42,7 @@ A coach can only ever read a client's data through an **active** `coach_client_l
 def _build_rate_limiter(settings: Settings) -> RateLimiter:
     try:
         return RedisRateLimiter(Redis.from_url(settings.redis_url, decode_responses=True))
-    except Exception:  # noqa: BLE001 - dev convenience, never in prod
+    except Exception:
         if settings.is_production:
             raise
         log.warning("ratelimit.redis_unavailable", fallback="in_memory")

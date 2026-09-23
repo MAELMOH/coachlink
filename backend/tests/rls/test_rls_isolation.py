@@ -79,7 +79,7 @@ async def isolation_fixture(owner_engine, app_engine, schema_ready):
         ):
             await conn.execute(
                 sqlalchemy.text(
-                    "INSERT INTO \"user\" (id, email, password_hash, role, first_name, "
+                    'INSERT INTO "user" (id, email, password_hash, role, first_name, '
                     "last_name) VALUES (:id, :email, :pwd, :role, :fn, :ln)"
                 ),
                 {
@@ -194,14 +194,10 @@ class TestCrossCoachWrite:
         async with app_engine.begin() as conn:
             await _as_user(conn, ids["coach_a"])
             result = await conn.execute(
-                sqlalchemy.text(
-                    "UPDATE body_measurement SET source = 'coach' WHERE id = :id"
-                ),
+                sqlalchemy.text("UPDATE body_measurement SET source = 'coach' WHERE id = :id"),
                 {"id": ids["measurement_b"]},
             )
-            assert result.rowcount == 0, (
-                "coach A modified a row belonging to coach B's client"
-            )
+            assert result.rowcount == 0, "coach A modified a row belonging to coach B's client"
 
     async def test_coach_cannot_delete_another_coachs_client_data(
         self, app_engine, isolation_fixture

@@ -31,7 +31,7 @@ from typing import Any
 
 import pytest
 
-__all__ = ["require", "require_any", "require_module", "is_available"]
+__all__ = ["is_available", "require", "require_any", "require_module"]
 
 
 def require_module(dotted: str) -> ModuleType:

@@ -42,9 +42,20 @@ REFERENCE_NOW = datetime(2026, 9, 22, 12, 0, 0, tzinfo=UTC)
 # ---------------------------------------------------------------------------
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_configure(config: pytest.Config) -> None:
+    """Register QA-owned markers here rather than in ``pyproject.toml``.
+
+    ``pyproject.toml`` belongs to ``back`` and both of us editing it invites conflicts.
+    ``--strict-markers`` is satisfied by registration from any plugin, so the QA-specific
+    markers live with the QA suite. ``integration`` and ``rls`` stay in ``pyproject.toml``
+    because ``devops`` filters CI jobs on them.
+    """
+    config.addinivalue_line(
+        "markers", "rgpd: verifies a GDPR guarantee (encryption, consent, erasure, PII)"
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip DB-backed tests with an explicit reason when no PostgreSQL is reachable.
 
     This keeps ``pytest`` runnable on a laptop without Docker while making it obvious in
@@ -156,9 +167,7 @@ def app_url(db_endpoint: database.DbEndpoint) -> str:
     finally:
         engine.dispose()
 
-    return database.with_credentials(
-        db_endpoint.url, database.APP_ROLE, database.APP_ROLE_PASSWORD
-    )
+    return database.with_credentials(db_endpoint.url, database.APP_ROLE, database.APP_ROLE_PASSWORD)
 
 
 @pytest.fixture(scope="session")
@@ -172,7 +181,7 @@ def schema_ready(owner_url: str) -> bool:
         pytest.skip("app/models not available yet (waiting on `back`)")
 
     sqlalchemy = pytest.importorskip("sqlalchemy")
-    from app.models.base import Base  # noqa: PLC0415 - deliberately lazy
+    from app.models.base import Base
 
     engine = sqlalchemy.create_engine(database.to_psycopg(owner_url))
     try:

@@ -34,12 +34,12 @@ from app.models.base import Base, PkMixin, SoftDeleteMixin, TimestampMixin
 
 __all__ = [
     "Exercise",
+    "PersonalRecord",
     "Program",
     "ProgramSession",
     "SessionExercise",
-    "WorkoutLog",
     "SetLog",
-    "PersonalRecord",
+    "WorkoutLog",
 ]
 
 #: Loads and reps are money-like quantities for the volume computation: Decimal,
@@ -152,7 +152,9 @@ class ProgramSession(PkMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     day_index: Mapped[int] = mapped_column(Integer, nullable=False)
     scheduled_date: Mapped[date | None] = mapped_column(Date, index=True)
-    order: Mapped[int] = mapped_column("position", Integer, nullable=False, server_default=text("0"))
+    order: Mapped[int] = mapped_column(
+        "position", Integer, nullable=False, server_default=text("0")
+    )
     notes: Mapped[str | None] = mapped_column(Text)
 
     program: Mapped[Program] = relationship(back_populates="sessions")
@@ -177,7 +179,9 @@ class SessionExercise(PkMixin, TimestampMixin, Base):
     exercise_id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("exercise.id", ondelete="RESTRICT"), nullable=False
     )
-    order: Mapped[int] = mapped_column("position", Integer, nullable=False, server_default=text("0"))
+    order: Mapped[int] = mapped_column(
+        "position", Integer, nullable=False, server_default=text("0")
+    )
     target_sets: Mapped[int] = mapped_column(Integer, nullable=False)
     target_reps: Mapped[int | None] = mapped_column(Integer)
     target_load_kg: Mapped[Decimal | None] = mapped_column(LOAD_TYPE)

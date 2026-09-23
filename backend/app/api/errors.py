@@ -48,9 +48,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return _envelope(request, exc.status_code, exc.code, exc.message, exc.details)
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_error(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
         # Report field locations and error types, never the rejected *values*:
         # a failing password or weight would otherwise end up in logs and Sentry.
         fields = [
@@ -75,6 +73,4 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         # Log the traceback server-side; return nothing about it to the caller.
         log.exception("unhandled_exception", exc_type=type(exc).__name__)
-        return _envelope(
-            request, 500, ErrorCode.INTERNAL_ERROR, "An unexpected error occurred."
-        )
+        return _envelope(request, 500, ErrorCode.INTERNAL_ERROR, "An unexpected error occurred.")

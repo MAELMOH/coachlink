@@ -27,7 +27,7 @@ async def readiness() -> dict[str, Any]:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         checks["database"] = "ok"
-    except Exception as exc:  # noqa: BLE001 - probe must report, not crash
+    except Exception as exc:
         checks["database"] = f"error: {type(exc).__name__}"
     status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
     return {"status": status, "checks": checks}

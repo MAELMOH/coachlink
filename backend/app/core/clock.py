@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, runtime_checkable
 
-__all__ = ["Clock", "SystemClock", "FrozenClock"]
+__all__ = ["Clock", "FrozenClock", "SystemClock"]
 
 
 @runtime_checkable

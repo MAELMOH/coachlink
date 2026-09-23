@@ -31,13 +31,13 @@ from app.domain.enums import CoachingMode, LinkStatus, UserRole
 from app.models.base import Base, PkMixin, SoftDeleteMixin, TimestampMixin
 
 __all__ = [
-    "User",
-    "CoachProfile",
     "ClientProfile",
     "CoachClientLink",
+    "CoachProfile",
+    "EncryptionKey",
     "Invitation",
     "RefreshToken",
-    "EncryptionKey",
+    "User",
 ]
 
 
@@ -68,9 +68,7 @@ class User(PkMixin, TimestampMixin, SoftDeleteMixin, Base):
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        CheckConstraint("role IN ('coach','client')", name="role_valid"),
-    )
+    __table_args__ = (CheckConstraint("role IN ('coach','client')", name="role_valid"),)
 
 
 class CoachProfile(PkMixin, TimestampMixin, Base):
@@ -140,9 +138,7 @@ class CoachClientLink(PkMixin, TimestampMixin, Base):
 
     __table_args__ = (
         CheckConstraint("coach_id <> client_id", name="no_self_link"),
-        CheckConstraint(
-            "status IN ('pending','active','paused','revoked')", name="status_valid"
-        ),
+        CheckConstraint("status IN ('pending','active','paused','revoked')", name="status_valid"),
         CheckConstraint("coaching_mode IN ('presentiel','distance')", name="mode_valid"),
         # "A client has at most ONE active link at a time" (§4). Enforced by a
         # partial unique index, not only in the service layer: two concurrent

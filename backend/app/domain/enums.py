@@ -16,6 +16,8 @@ __all__ = [
     "DataRequestStatus",
     "DataRequestType",
     "DevicePlatform",
+    "ExerciseSource",
+    "LinkStatus",
     "MealSlot",
     "MeasurementSource",
     "MediaLicense",
@@ -27,8 +29,6 @@ __all__ = [
     "SubscriptionStatus",
     "UserRole",
     "WorkoutStatus",
-    "ExerciseSource",
-    "LinkStatus",
 ]
 
 

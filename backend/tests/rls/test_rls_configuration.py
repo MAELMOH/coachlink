@@ -75,9 +75,7 @@ class TestApplicationRolePrivileges:
             "tests below would pass while proving nothing"
         )
 
-    async def test_the_suite_is_really_connected_as_the_unprivileged_role(
-        self, app_engine
-    ) -> None:
+    async def test_the_suite_is_really_connected_as_the_unprivileged_role(self, app_engine) -> None:
         """Guards against a misconfigured ``TEST_DATABASE_URL_APP`` silently pointing at
         the owner — which would make every isolation assertion meaningless."""
         from tests.support.database import APP_ROLE
@@ -186,9 +184,7 @@ class TestFailClosed:
                 )
                 if not exists.scalar_one():
                     continue
-                result = await conn.execute(
-                    sqlalchemy.text(f"SELECT count(*) FROM {table}")  # noqa: S608 - fixed list
-                )
+                result = await conn.execute(sqlalchemy.text(f"SELECT count(*) FROM {table}"))
                 assert result.scalar_one() == 0, (
                     f"{table} returned rows with no app.current_user_id set. The policy "
                     "is not fail-closed: any endpoint that forgets to establish the "

@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.domain.ids import uuid7
 
-__all__ = ["Base", "PkMixin", "TimestampMixin", "SoftDeleteMixin", "utcnow_column"]
+__all__ = ["Base", "PkMixin", "SoftDeleteMixin", "TimestampMixin", "utcnow_column"]
 
 # Explicit naming convention: Alembic autogenerate produces stable, reviewable
 # constraint names instead of database-assigned ones.

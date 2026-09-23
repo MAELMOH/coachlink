@@ -74,9 +74,25 @@ ignore = [
     "S101",  # assert is fine in tests
 ]
 
+# "×" and "→" appear in docstrings that quote ARCHITECTURE.md (volume = Σ reps × load).
+# Keeping the real character is clearer than transliterating it.
+allowed-confusables = ["×", "→", "Σ", "—"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S105", "S106", "S311"]
+# S105 flags every constant whose NAME contains "token" as a hardcoded password.
+# app/core/errors.py holds the error-code vocabulary (TOKEN_EXPIRED, ...), which
+# are public API contract strings, not credentials.
+"app/core/errors.py" = ["S105"]
+# `from sqlalchemy.dialects.postgresql import UUID as PgUUID` is the standard way
+# to disambiguate the dialect type from uuid.UUID; N811 reads it as a constant.
+"app/models/*" = ["N811"]
+# Test helpers legitimately build DDL/DML strings (schema reset, RLS probes) and
+# shell out to docker/psql. Neither takes untrusted input.
+"tests/*" = ["S105", "S106", "S311", "S607", "S608"]
 "alembic/*" = ["E501"]
+# The RLS migration composes policy SQL from module-level constants only — no
+# runtime input reaches it. See the module docstring for the threat analysis.
+"alembic/versions/*" = ["E501", "S608"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

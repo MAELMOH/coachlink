@@ -21,15 +21,15 @@ from app.core.config import Settings, get_settings
 from app.core.errors import ApiError, ErrorCode
 
 __all__ = [
-    "hash_password",
-    "verify_password",
-    "needs_rehash",
+    "TokenPayload",
     "create_access_token",
     "decode_token",
-    "generate_refresh_token",
-    "hash_refresh_token",
     "generate_invitation_code",
-    "TokenPayload",
+    "generate_refresh_token",
+    "hash_password",
+    "hash_refresh_token",
+    "needs_rehash",
+    "verify_password",
 ]
 
 #: Unambiguous alphabet for invitation codes: no O/0, no I/1/l.
@@ -69,7 +69,7 @@ def needs_rehash(password_hash: str, settings: Settings | None = None) -> bool:
 class TokenPayload:
     """Decoded access-token claims."""
 
-    __slots__ = ("user_id", "role", "expires_at", "jti")
+    __slots__ = ("expires_at", "jti", "role", "user_id")
 
     def __init__(self, user_id: UUID, role: str, expires_at: datetime, jti: str) -> None:
         self.user_id = user_id

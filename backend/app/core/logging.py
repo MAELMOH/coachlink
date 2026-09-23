@@ -21,7 +21,7 @@ import structlog
 
 from app.core.config import get_settings
 
-__all__ = ["configure_logging", "get_logger", "pseudonymize", "hash_ip", "scrub_pii"]
+__all__ = ["configure_logging", "get_logger", "hash_ip", "pseudonymize", "scrub_pii"]
 
 #: Keys never written to logs, whatever their value. Checked case-insensitively
 #: on the exact key name. Keep alphabetical, add freely — over-redacting is cheap.
@@ -77,9 +77,7 @@ SENSITIVE_KEYS: frozenset[str] = frozenset(
 _REDACTED = "[redacted]"
 
 
-def scrub_pii(
-    _logger: object, _name: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def scrub_pii(_logger: object, _name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Drop sensitive keys from the event, recursively into nested dicts."""
     return _scrub(event_dict)
 

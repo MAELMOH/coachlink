@@ -21,7 +21,7 @@ from app.core.errors import ApiError, ErrorCode
 from app.core.logging import get_logger, pseudonymize
 from app.core.ratelimit import RateLimiter
 
-__all__ = ["RequestContextMiddleware", "RateLimitMiddleware", "REQUEST_ID_HEADER"]
+__all__ = ["REQUEST_ID_HEADER", "RateLimitMiddleware", "RequestContextMiddleware"]
 
 REQUEST_ID_HEADER = "X-Request-ID"
 

@@ -35,13 +35,13 @@ from app.domain.enums import (
 from app.models.base import Base, PkMixin, TimestampMixin
 
 __all__ = [
+    "ActiveClientSnapshot",
+    "AuditLog",
+    "BillingEvent",
     "Consent",
     "DataRequest",
-    "AuditLog",
-    "Subscription",
-    "BillingEvent",
-    "ActiveClientSnapshot",
     "IdempotencyRecord",
+    "Subscription",
 ]
 
 
@@ -229,8 +229,8 @@ class IdempotencyRecord(PkMixin, TimestampMixin, Base):
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     response_status: Mapped[int | None] = mapped_column(Integer)
     response_body: Mapped[dict[str, object] | None] = mapped_column(JSONB)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "endpoint", "key", name="uq_idempotency_scope"),
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
     )
+
+    __table_args__ = (UniqueConstraint("user_id", "endpoint", "key", name="uq_idempotency_scope"),)

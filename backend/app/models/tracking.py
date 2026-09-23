@@ -34,10 +34,10 @@ from app.models.base import Base, PkMixin, TimestampMixin
 
 __all__ = [
     "BodyMeasurement",
-    "ProgressPhoto",
-    "NutritionPlan",
     "Meal",
     "NutritionLog",
+    "NutritionPlan",
+    "ProgressPhoto",
 ]
 
 
@@ -119,9 +119,7 @@ class NutritionPlan(PkMixin, TimestampMixin, Base):
     ends_on: Mapped[date | None] = mapped_column(Date)
     status: Mapped[ProgramStatus] = mapped_column(String(16), nullable=False)
 
-    meals: Mapped[list[Meal]] = relationship(
-        back_populates="plan", cascade="all, delete-orphan"
-    )
+    meals: Mapped[list[Meal]] = relationship(back_populates="plan", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint("status IN ('draft','published','archived')", name="status_valid"),
@@ -136,7 +134,9 @@ class Meal(PkMixin, TimestampMixin, Base):
         PgUUID(as_uuid=True), ForeignKey("nutrition_plan.id", ondelete="CASCADE"), nullable=False
     )
     slot: Mapped[MealSlot] = mapped_column(String(16), nullable=False)
-    order: Mapped[int] = mapped_column("position", Integer, nullable=False, server_default=text("0"))
+    order: Mapped[int] = mapped_column(
+        "position", Integer, nullable=False, server_default=text("0")
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     kcal_enc: Mapped[bytes | None] = mapped_column(LargeBinary)  # 🔒
@@ -147,9 +147,7 @@ class Meal(PkMixin, TimestampMixin, Base):
     plan: Mapped[NutritionPlan] = relationship(back_populates="meals")
 
     __table_args__ = (
-        CheckConstraint(
-            "slot IN ('breakfast','lunch','dinner','snack')", name="slot_valid"
-        ),
+        CheckConstraint("slot IN ('breakfast','lunch','dinner','snack')", name="slot_valid"),
     )
 
 

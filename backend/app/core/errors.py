@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["ErrorCode", "ApiError", "http_status_for"]
+__all__ = ["ApiError", "ErrorCode", "http_status_for"]
 
 
 class ErrorCode:

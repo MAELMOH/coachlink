@@ -136,7 +136,7 @@ def resolve_endpoint() -> DbEndpoint | None:
     try:
         _container = PostgresContainer("postgres:16-alpine")
         _container.start()
-    except Exception:  # noqa: BLE001 - any container failure means "no database"
+    except Exception:
         _container = None
         return None
 
