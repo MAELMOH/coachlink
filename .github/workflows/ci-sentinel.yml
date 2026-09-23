@@ -1,0 +1,69 @@
+# =============================================================================
+# CI Sentinel — check requis universel pour la protection de `main`
+#
+# Problème résolu : `ci-backend.yml` et `ci-mobile.yml` sont filtrés par
+# `paths:` (backend/** et mobile/** respectivement). Si on les rend
+# "required" tels quels dans la protection de branche GitHub, une PR qui ne
+# touche NI backend/ NI mobile/ (ex : docs/, ARCHITECTURE.md, TASKS.md, ce
+# fichier lui-même) ne déclenche AUCUN des deux checks — GitHub laisse alors
+# le statut required indéfiniment "en attente" et bloque le merge pour
+# toujours, sans qu'aucune action humaine ne puisse le débloquer autrement
+# qu'en désactivant la protection. C'est le piège identifié le 2026-09-22.
+#
+# Solution retenue (DevOps, 2026-09-23) : un job sentinelle SANS filtre de
+# chemin, qui se déclenche sur CHAQUE pull_request quel que soit son
+# périmètre, volontairement très léger (quelques secondes). C'est LUI qui
+# devient le status check "required" dans la protection de branche —
+# garantit qu'il existe toujours au moins un check requis qui se déclenche
+# et se termine sur toute PR. `ci-backend` et `ci-mobile` restent utiles et
+# visibles mais NE SONT PAS mis en required pour l'instant : les rendre
+# required récréerait exactement le piège ci-dessus dès qu'une PR mono-scope
+# arrive. Alternative envisagée et écartée : job d'agrégation qui attend les
+# deux CI scopées avant de répondre — plus correct à terme (garantirait que
+# le scope réellement modifié est vert) mais plus complexe (polling de
+# l'API Checks) et pas nécessaire tant que l'équipe est petite et que les PR
+# sont revues visuellement. À reconsidérer si le volume de PR augmente.
+#
+# Profite du passage pour vérifier un minimum utile et non intrusif : le
+# titre de la PR respecte Conventional Commits (ARCHITECTURE.md §3), déjà
+# documenté mais jusqu'ici jamais vérifié mécaniquement.
+# =============================================================================
+
+name: CI Sentinel
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-sentinel-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sentinel:
+    name: PR sanity (toujours déclenché)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Vérifie le titre de la PR (Conventional Commits)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Titre de la PR : $PR_TITLE"
+          if ! echo "$PR_TITLE" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9_-]+\))?!?: .+'; then
+            echo "::error::Le titre de la PR ne respecte pas Conventional Commits (voir ARCHITECTURE.md §3)."
+            echo "Exemples valides : 'feat(backend): ...', 'fix(mobile): ...', 'docs: ...'"
+            exit 1
+          fi
+
+      - name: OK
+        run: echo "Sentinelle CI : checkout OK, repo accessible."

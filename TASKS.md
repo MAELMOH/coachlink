@@ -37,13 +37,15 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 
 ## Phase 1 — Fondations (DevOps, démarre en parallèle de la phase 0)
 
-- [~] Créer le repo GitHub (ou init local si pas encore de remote), structure de base, README
-      — repo git local initialisé, README complet (stack réelle + instructions de dev vérifiées),
-      `.gitignore` adapté Flutter + Python. **Reste uniquement le remote GitHub** : en attente
-      d'une confirmation explicite de l'utilisateur (création + premier push = action publique).
+- [x] Créer le repo GitHub, structure de base, README
+      — remote créé : https://github.com/MAELMOH/coachlink (public), branche par défaut `main`.
+      README complet, `.gitignore` adapté Flutter + Python. PR #1 (`feat/mobile-socle` → `main`)
+      ouverte avec tout le travail à date ; fusion volontairement laissée à l'utilisateur humain
+      (règle "pas de merge sans review humaine").
 - [x] Structure mono-repo : `backend/` `mobile/` `docs/` `.github/workflows/` (voir `ARCHITECTURE.md` §3)
       — `docs/` et `.github/` créés par DevOps ; `backend/` et `mobile/` par `back` et `front`.
       Ajout de `infra/postgres/init/` (rôles + extensions, partagé dev/CI).
+      Re-vérifié 2026-09-23 : conforme à l'arborescence cible.
 - [x] Pipeline CI backend : `.github/workflows/ci-backend.yml` — `ruff check` + `ruff format --check`
       + `mypy app/domain` (strict) + `pytest` en deux passes (rapide sans services, puis complète)
       avec services Postgres 16 + Redis 7, Python épinglé 3.12, couverture `app.domain`/`app.services`.
@@ -51,8 +53,14 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
       → `build_runner` → `flutter analyze --no-fatal-infos` → `flutter test test/`.
       `integration_test/` volontairement exclu (nécessite un émulateur, demande QA).
 - [~] Protection de `main` (PR obligatoire, CI verte requise), Conventional Commits
-      — conventions documentées (README) + `pull_request_template.md` avec checklist RLS/RGPD.
-      La protection de branche elle-même ne peut être configurée qu'une fois le remote GitHub créé.
+      — branche `main` protégée créée : PR obligatoire, 0 approbation requise (pas de reviewer
+      humain dispo), force-push et suppression de branche bloqués. **Pas encore de status check
+      requis** — `ci-backend`/`ci-mobile` sont filtrés par `paths:` et bloqueraient indéfiniment
+      une PR hors de leur périmètre si rendus required tels quels. Décision et solution
+      (`ci-sentinel.yml`) : voir Journal des décisions, 2026-09-23. **Reste à faire par un humain**
+      (accès admin GitHub / `gh` CLI non disponibles depuis l'agent DevOps) : dans Settings →
+      Branches → règle de `main`, cocher "Require status checks to pass" et ajouter `PR sanity
+      (toujours déclenché)` (job `sentinel` de `ci-sentinel.yml`) comme check requis.
 - [x] `docker-compose.yml` dev local : Postgres 16, Redis 7, MinIO (S3-compatible)
       — **démarré et vérifié réellement** : 3 conteneurs `healthy`, buckets privés créés,
       extensions `citext`/`pgcrypto` installées, et isolation RLS testée de bout en bout.
@@ -201,6 +209,42 @@ avez le temps (pas obligatoire), sinon le chef de projet resynchronisera périod
 ## Journal des décisions
 
 _(Tech Lead / chaque agent : consigner ici les décisions importantes avec la date et la justification)_
+
+- **2026-09-23 [DevOps]** Reprise de session (agent DevOps précédent arrêté, non récupérable).
+  État vérifié à froid : structure mono-repo conforme à `ARCHITECTURE.md` §3, remote GitHub
+  `https://github.com/MAELMOH/coachlink` existant et protégé (PR obligatoire, 0 approbation
+  requise, force-push/suppression bloqués), PR #1 (`feat/mobile-socle` → `main`) ouverte et non
+  fusionnée (laissée à l'utilisateur, conformément à la règle "pas de merge sans review humaine").
+  Continuation des commits sur `feat/mobile-socle` (pas de nouvelle branche : `main` n'a pas
+  encore reçu la PR #1, repartir "propre" n'apporterait rien pour l'instant).
+
+  **Piège des status checks requis, tranché** : `ci-backend.yml` et `ci-mobile.yml` sont filtrés
+  par `paths:` (backend/**, mobile/**). Les rendre "required" dans la protection de `main` tels
+  quels bloquerait indéfiniment toute PR hors de leur périmètre (docs/, ARCHITECTURE.md,
+  TASKS.md, workflows eux-mêmes...) puisqu'aucun des deux ne se déclencherait — GitHub laisse un
+  check required non déclenché en attente permanente, sans déblocage possible autrement qu'en
+  changeant la config de protection. Option retenue : nouveau job **sentinelle**
+  (`.github/workflows/ci-sentinel.yml`, job `sentinel`) SANS filtre de chemin, déclenché sur
+  chaque PR quel que soit le scope, volontairement minimal (quelques secondes, vérifie juste que
+  le titre de la PR respecte Conventional Commits). C'est ce job qui doit devenir le status check
+  requis — garantit qu'il y a toujours un check qui se déclenche et se termine. `ci-backend` et
+  `ci-mobile` restent en place et visibles mais PAS marqués required pour l'instant : les
+  transformer en required reproduirait le même piège dès qu'une PR mono-scope arrive. Alternative
+  écartée pour l'instant : un job d'agrégateur qui attend/poll les statuts des deux CI scopées via
+  l'API GitHub Checks avant de répondre lui-même — plus correct (garantirait que le scope
+  réellement modifié est vert avant merge) mais plus complexe à maintenir ; à reconsidérer si le
+  volume de PR augmente ou si un merge sans CI scopée verte cause un incident.
+
+  **Action humaine restante** (l'agent DevOps n'a pas d'accès `gh` CLI ni de token API GitHub
+  dans cet environnement — tentative volontairement non contournée, voir note ci-dessous) :
+  dans GitHub → Settings → Branches → règle de `main` → activer "Require status checks to pass
+  before merging" et cocher le check `PR sanity (toujours déclenché)` (job `sentinel`). Idéalement
+  fait après le premier passage de `ci-sentinel.yml` sur une PR (le check doit avoir tourné au
+  moins une fois pour apparaître dans la liste GitHub).
+
+  Jira : SCRUM-11 passé à *Terminé* (repo + structure + README réellement en place, remote créé).
+  SCRUM-13 passé à *En cours* (docker-compose dev local vérifié ; staging Scaleway explicitement
+  hors périmètre sans confirmation explicite de l'utilisateur, cf. règle permanente).
 
 - **2026-09-23 [Chef de projet]** Définition de « client actif » figée (SCRUM-1 fermé) :
   lien actif, mois de création exclu (pas de prorata), client hors essai gratuit, ≥2 événements
