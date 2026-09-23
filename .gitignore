@@ -1,50 +1,102 @@
-# --- Général / OS / éditeurs ---
+# =============================================================================
+# CoachLink — mono-repo (Flutter + FastAPI). Voir ARCHITECTURE.md §3.
+# =============================================================================
+
+# --- OS / éditeurs ---
 .DS_Store
 Thumbs.db
-*.log
-*.tmp
+desktop.ini
 .vscode/
+!.vscode/extensions.json
 .idea/
+*.iml
+*.swp
 
-# --- Env & secrets ---
+# --- Secrets & environnement (RGPD : aucune valeur réelle dans le repo) ---
 .env
 .env.*
 !.env.example
 *.pem
 *.key
-secrets/
-
-# --- Node / JS-TS (mobile RN/Expo, backend Node éventuel) ---
-node_modules/
-dist/
-build/
-coverage/
-.expo/
-.expo-shared/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# --- Mobile natif (au cas où) ---
+*.p12
 *.jks
 *.keystore
-ios/Pods/
-android/.gradle/
-android/app/build/
-*.ipa
+secrets/
+service-account*.json
+
+# =============================================================================
+# Backend — Python 3.12 / FastAPI
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+# Rapports JUnit produits par pytest (--junitxml), consommés par la CI
+# (.github/scripts/assert_db_tests_ran.py) et uploadés en artefact.
+reports/
+.tox/
+.hypothesis/
+
+# =============================================================================
+# Mobile — Flutter / Dart
+# =============================================================================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+
+# Code généré (décision DevOps/front 2026-09-22 : NON committé, régénéré via
+# `dart run build_runner build --delete-conflicting-outputs` en local et en CI).
+*.g.dart
+*.freezed.dart
+*.config.dart
+*.mocks.dart
+*.gr.dart
+
+# NB : `pubspec.lock` et `poetry.lock`/`uv.lock` SONT committés (builds reproductibles).
+
+# Android
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/local.properties
+mobile/android/key.properties
 *.apk
 *.aab
 
-# --- Python (si backend Python) ---
-__pycache__/
-*.pyc
-.venv/
-venv/
-*.egg-info/
+# iOS
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/Flutter.framework/
+mobile/ios/Flutter/Flutter.podspec
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/ios/Runner/GeneratedPluginRegistrant.*
+*.ipa
 
-# --- Docker ---
-*.override.yml
-
-# NOTE: ce fichier sera affiné une fois la stack figée dans ARCHITECTURE.md
-# (ajout des ignores spécifiques au framework mobile / backend choisi).
+# =============================================================================
+# Infra / divers
+# =============================================================================
+docker-compose.override.yml
+*.log
+*.tmp
+.data/
+minio-data/
+postgres-data/

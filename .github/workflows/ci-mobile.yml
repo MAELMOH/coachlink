@@ -1,0 +1,85 @@
+# =============================================================================
+# CI Mobile — Flutter / Dart
+#
+# Déclenché uniquement sur les chemins mobile (exigence Tech Lead).
+#
+# Le code généré (`*.g.dart`, `*.freezed.dart`, drift) n'est PAS committé
+# (décision DevOps + front, 2026-09-22) : il est régénéré ici par build_runner.
+# Conséquence sur l'ordre des étapes, qui n'est pas anodin :
+#   pub get -> dart format (AVANT génération) -> build_runner -> analyze -> test
+# `dart format` est purement syntaxique, il n'a pas besoin des fichiers générés ;
+# le lancer avant la génération évite que du code généré non conforme au
+# formateur fasse échouer la CI pour une raison qui n'est pas de notre ressort.
+# =============================================================================
+
+name: CI Mobile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/ci-mobile.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/ci-mobile.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mobile:
+    name: Format · Analyze · Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Version ÉPINGLÉE sur celle du poste de dev (`front`), et non
+          # `channel: stable`. Raison concrète : le formateur Dart a changé de
+          # style à partir de Dart 3.7. Avec la dernière stable, la CI
+          # reformaterait l'intégralité du projet et `dart format --set-exit-if-changed`
+          # échouerait sur presque chaque fichier, alors que le formatage passe
+          # en local. Une CI qui diverge du poste de dev ne sert à rien.
+          # TODO(equipe) : Flutter 3.24.1 date d'août 2024. Monter de version est
+          # souhaitable, mais c'est une décision Tech Lead / front — elle implique
+          # un reformatage global du projet, à faire en une PR dédiée et isolée.
+          flutter-version: 3.24.1
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      # Avant build_runner : on ne vérifie que le code écrit à la main.
+      # `--output=none` est indispensable : sans lui, `dart format` RÉÉCRIT les
+      # fichiers sur place (le flag --set-exit-if-changed ne pilote que le code
+      # de sortie, pas l'écriture). On veut une vérification, pas une modification.
+      - name: dart format — vérification
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: build_runner (freezed · json_serializable · drift)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: flutter analyze
+        run: flutter analyze --no-fatal-infos
+
+      # `test/` uniquement : les tests de `integration_test/` exigent un device
+      # ou un émulateur et feraient échouer ce job (demande explicite de QA).
+      # Ils seront câblés plus tard sur un runner dédié.
+      - name: flutter test
+        run: flutter test test/

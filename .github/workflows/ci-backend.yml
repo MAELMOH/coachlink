@@ -1,0 +1,225 @@
+# =============================================================================
+# CI Backend — Python 3.12 / FastAPI
+#
+# Déclenché uniquement sur les chemins backend (exigence Tech Lead : ne pas
+# faire tourner Flutter sur une PR backend, et inversement).
+#
+# Les tests tournent contre un VRAI PostgreSQL 16 : les policies Row Level
+# Security n'existent pas en SQLite, et c'est le risque de sécurité n°1 du
+# projet (fuite transversale coach A -> client de coach B). Voir
+# ARCHITECTURE.md §4 "Règle d'accès transversale".
+# =============================================================================
+
+name: CI Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "infra/postgres/**"
+      - ".github/workflows/ci-backend.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "infra/postgres/**"
+      - ".github/workflows/ci-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Seuil de couverture sur la logique métier (app/domain + app/services).
+  COVERAGE_MIN: "80"
+  # Tant que `app/domain` et `app/services` sont quasi vides, un seuil bloquant
+  # mettrait la CI au rouge dès le premier commit. Le rapport est donc affiché
+  # mais non bloquant. Passer à "true" quand l'agent QA donne son feu vert
+  # (demande explicite de sa part, 2026-09-22).
+  COVERAGE_ENFORCE: "false"
+
+jobs:
+  backend:
+    name: Lint · Types · Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # Rôle PROPRIÉTAIRE (migrations Alembic). Le rôle applicatif
+          # NOBYPASSRLS est créé juste après, via infra/postgres/init.
+          POSTGRES_USER: coachlink_owner
+          POSTGRES_PASSWORD: ci_only_not_a_secret
+          POSTGRES_DB: coachlink_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U coachlink_owner -d coachlink_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Rejoue le MÊME script qu'en dev local : source de vérité unique pour les
+      # rôles. Garantit que la CI teste bien avec un rôle qui ne peut pas
+      # contourner la RLS.
+      - name: Provision PostgreSQL roles (RLS) + extensions
+        working-directory: .
+        env:
+          PGPASSWORD: ci_only_not_a_secret
+        run: |
+          psql -h localhost -U coachlink_owner -d coachlink_test \
+               -v ON_ERROR_STOP=1 \
+               -f infra/postgres/init/01-roles.sql
+
+      - name: Ruff — lint
+        run: ruff check --output-format=github .
+
+      - name: Ruff — format check
+        run: ruff format --check .
+
+      # `-p app.domain` et NON `mypy app/domain` : sans `__init__.py`, l'invocation
+      # par chemin fait résoudre les fichiers comme des modules racine (`ids`,
+      # `enums`), si bien que le bloc `[[tool.mypy.overrides]] module =
+      # "app.domain.*"` de pyproject.toml ne matche jamais — mypy le signale par
+      # `unused section(s)`. Le mode strict demandé ne s'appliquait donc pas.
+      - name: mypy — strict sur app/domain
+        run: mypy -p app.domain
+
+      # `alembic check` compare les modèles SQLAlchemy au schéma réellement migré et
+      # échoue si un autogenerate produirait encore des opérations — autrement dit si
+      # modèle et migrations ont divergé. Demandé par `back` (2026-09-23) après une
+      # dérive réelle : `user_account.email` déclaré `Text` côté modèle mais converti en
+      # `citext` par la migration. Le check rouge n'était pas le vrai risque ; le risque
+      # était qu'un futur `alembic revision --autogenerate` émette un
+      # `ALTER COLUMN email TYPE text` et rétablisse silencieusement la sensibilité à la
+      # casse sur les e-mails (donc deux comptes "A@x.com" et "a@x.com").
+      #
+      # Tourne sur une base DÉDIÉE et vierge, pas sur `coachlink_test` : la suite pytest
+      # migre elle-même sa base (tests/support/schema.py), et se marcher dessus rendrait
+      # le résultat dépendant de l'ordre des étapes. Une base vierge suffit — depuis
+      # 2026-09-23 la migration initiale crée elle-même `citext` et `pgcrypto` au lieu de
+      # supposer que le script d'init du conteneur est passé.
+      #
+      # Le rôle `coachlink_app` doit exister AVANT les migrations (la migration RLS fait
+      # `CREATE POLICY … TO coachlink_app`) : c'est garanti par l'étape de provisioning
+      # ci-dessus, les rôles étant globaux au cluster et non à la base.
+      - name: alembic — dérive modèle / migration
+        env:
+          PGPASSWORD: ci_only_not_a_secret
+          COACHLINK_DATABASE_MIGRATION_URL: postgresql+asyncpg://coachlink_owner:ci_only_not_a_secret@localhost:5432/coachlink_migrations_check
+        run: |
+          psql -h localhost -U coachlink_owner -d coachlink_test -v ON_ERROR_STOP=1 \
+               -c "DROP DATABASE IF EXISTS coachlink_migrations_check" \
+               -c "CREATE DATABASE coachlink_migrations_check OWNER coachlink_owner"
+          alembic upgrade head
+          alembic check
+
+      # Retour rapide : logique métier pure, sans I/O. Si ça casse, inutile
+      # d'attendre les tests d'intégration.
+      - name: pytest — tests rapides (sans services)
+        run: pytest -m "not integration and not rls" -q
+
+      - name: pytest — suite complète (+ couverture logique métier)
+        env:
+          # --- Noms lus DIRECTEMENT par tests/support/database.py (sans préfixe) ---
+          # Rôle propriétaire : migrations Alembic, création du schéma de test.
+          TEST_DATABASE_URL: postgresql+asyncpg://coachlink_owner:ci_only_not_a_secret@localhost:5432/coachlink_test
+          # Rôle applicatif : NOSUPERUSER + NOBYPASSRLS. C'est CE rôle qui doit
+          # servir aux tests RLS — avec un superuser, les policies sont
+          # contournées silencieusement et les tests passeraient au vert sans
+          # rien vérifier (risque n°1 du projet).
+          TEST_DATABASE_URL_APP: postgresql+asyncpg://coachlink_app:coachlink_app_dev_only@localhost:5432/coachlink_test
+          TEST_REDIS_URL: redis://localhost:6379/1
+          # --- Config applicative (Pydantic Settings) ---
+          # Le préfixe COACHLINK_ est OBLIGATOIRE : `Settings` déclare
+          # env_prefix="COACHLINK_" avec extra="ignore" (app/core/config.py). Les
+          # variables nues `DATABASE_URL` / `SECRET_KEY` / `ENCRYPTION_KEK` utilisées
+          # ici jusqu'au 2026-09-23 n'étaient donc lues par personne : la config
+          # retombait silencieusement sur ses valeurs par défaut de dev. Corrigé, et
+          # les noms collent désormais aux vrais champs (`jwt_secret`, `kek_b64`).
+          # `ENVIRONMENT: ci` était doublement faux : mauvais préfixe, et "ci" n'est pas
+          # dans le Literal["dev","test","staging","prod"] — la validation aurait échoué
+          # si la variable avait effectivement été lue.
+          COACHLINK_ENVIRONMENT: test
+          COACHLINK_DATABASE_URL: postgresql+asyncpg://coachlink_app:coachlink_app_dev_only@localhost:5432/coachlink_test
+          COACHLINK_DATABASE_MIGRATION_URL: postgresql+asyncpg://coachlink_owner:ci_only_not_a_secret@localhost:5432/coachlink_test
+          COACHLINK_REDIS_URL: redis://localhost:6379/0
+          # Valeurs FACTICES de CI. Les vrais secrets (KEK de chiffrement des
+          # données de santé) vivent dans Scaleway Secret Manager — jamais ici,
+          # jamais dans le repo. Voir ARCHITECTURE.md §5.1.
+          # Le KEK doit être un base64 de 32 octets valide, sinon le service de
+          # chiffrement refuse de démarrer : ci-dessous = b64("ci-only-not-a-real-kek-32-bytes!").
+          COACHLINK_JWT_SECRET: ci_only_not_a_secret_change_me
+          COACHLINK_KEK_B64: Y2ktb25seS1ub3QtYS1yZWFsLWtlay0zMi1ieXRlcyE=
+        run: |
+          if [ "${COVERAGE_ENFORCE}" = "true" ]; then
+            FAIL_UNDER="--cov-fail-under=${COVERAGE_MIN}"
+          else
+            FAIL_UNDER=""
+            echo "::notice::Seuil de couverture ${COVERAGE_MIN}% affiché mais NON bloquant (COVERAGE_ENFORCE=false)."
+          fi
+          pytest -q \
+            --cov=app.domain --cov=app.services \
+            --cov-report=term-missing --cov-report=xml \
+            --junitxml=reports/pytest.xml \
+            ${FAIL_UNDER}
+
+      # Filet contre le pire mode d'échec de cette CI : une suite VERTE qui n'a en fait
+      # rien vérifié. Les tests `integration`/`rls` se skippent tout seuls quand aucun
+      # PostgreSQL n'est joignable (choix délibéré : jamais de repli sur SQLite, où les
+      # policies RLS n'existent pas), et pytest renvoie alors 0. Un service container qui
+      # ne démarre pas, une variable renommée ou des extras `dev` non installés
+      # suffisent donc à faire passer la CI au vert sans qu'une seule garantie
+      # d'isolation soit testée. `if: always()` : on veut le diagnostic même quand la
+      # suite est rouge par ailleurs.
+      - name: Vérifie que les tests RLS / intégration ont réellement tourné
+        if: always()
+        working-directory: .
+        run: python .github/scripts/assert_db_tests_ran.py backend/reports/pytest.xml
+
+      - name: Upload coverage + rapport de tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            backend/coverage.xml
+            backend/reports/pytest.xml
+          if-no-files-found: ignore
+          retention-days: 7

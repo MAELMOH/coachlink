@@ -1,0 +1,143 @@
+{
+  "@@locale": "fr",
+
+  "appName": "CoachLink",
+
+  "commonContinue": "Continuer",
+  "commonCancel": "Annuler",
+  "commonSave": "Enregistrer",
+  "commonRetry": "Réessayer",
+  "commonClose": "Fermer",
+  "commonLoading": "Chargement…",
+  "commonSearch": "Rechercher",
+
+  "navHome": "Accueil",
+  "navClients": "Clients",
+  "navLibrary": "Exercices",
+  "navMessages": "Messages",
+  "navProgress": "Progression",
+  "navProfile": "Profil",
+
+  "authSignInTitle": "Connexion",
+  "authSignUpTitle": "Créer un compte",
+  "authEmail": "Adresse e-mail",
+  "authPassword": "Mot de passe",
+  "authSignIn": "Se connecter",
+  "authSignUp": "S'inscrire",
+  "authRoleQuestion": "Je suis…",
+  "authRoleCoach": "Coach",
+  "authRoleClient": "Client",
+  "authLogout": "Se déconnecter",
+
+  "consentTitle": "Vos données, vos choix",
+  "consentIntro": "Pour utiliser CoachLink, nous avons besoin de votre accord sur trois points. Les deux derniers sont facultatifs et vous pouvez les modifier à tout moment.",
+  "consentRequiredSection": "Obligatoire",
+  "consentOptionalSection": "Facultatif",
+  "consentTos": "J'accepte les conditions générales d'utilisation",
+  "consentPrivacy": "J'accepte la politique de confidentialité",
+  "consentHealthData": "J'accepte le traitement de mes données de santé (poids, mensurations, nutrition) par mon coach",
+  "consentHealthDataHint": "Sans cet accord, le suivi ne peut pas fonctionner.",
+  "consentProgressPhotos": "J'autorise l'enregistrement de photos de progression",
+  "consentProgressPhotosHint": "Vos photos restent privées. Le partage avec votre coach se fait photo par photo.",
+  "consentMarketing": "J'accepte de recevoir des actualités et offres CoachLink",
+  "consentSubmit": "Valider mes choix",
+  "consentBlockedTitle": "Consentement requis",
+  "consentBlockedBody": "Vous devez accorder les consentements obligatoires pour continuer.",
+
+  "myDataTitle": "Mes données",
+  "myDataConsents": "Mes consentements",
+  "myDataExport": "Exporter mes données",
+  "myDataExportHint": "Vous recevrez une archive complète de vos données.",
+  "myDataDelete": "Supprimer mon compte",
+  "myDataDeleteHint": "Vous disposez de 7 jours pour annuler. Ensuite, la suppression est définitive.",
+  "myDataRevoke": "Révoquer",
+
+  "trialBannerRemaining": "Essai gratuit : {days, plural, =0{dernier jour} =1{1 jour restant} other{{days} jours restants}}",
+  "@trialBannerRemaining": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+  "trialExpiredTitle": "Votre essai est terminé",
+  "trialExpiredBody": "Vous gardez l'accès à votre programme et à tout votre historique en lecture seule. Pour reprendre l'enregistrement de vos séances, activez votre abonnement.",
+  "readOnlyBadge": "Lecture seule",
+
+  "coachDashboardTitle": "Mes clients",
+  "coachInviteTitle": "Inviter un client",
+  "coachInviteGenerate": "Générer une invitation",
+  "coachInviteShare": "Partager le lien",
+  "coachInviteCodeLabel": "Code d'invitation",
+  "coachInviteModeQuestion": "Type de coaching",
+  "coachingModePresentiel": "Présentiel",
+  "coachingModeDistance": "À distance",
+  "coachingModeDistanceHint": "Active la messagerie et le suivi complet.",
+  "coachingModePresentielHint": "Suivi simplifié, messagerie désactivée.",
+
+  "inviteAcceptTitle": "Rejoindre mon coach",
+  "inviteAcceptCodeLabel": "Code à 8 caractères",
+  "inviteAcceptSubmit": "Valider le code",
+
+  "todaySessionTitle": "Ma séance du jour",
+  "weekViewTitle": "Ma semaine",
+  "noSessionToday": "Pas de séance prévue aujourd'hui.",
+  "workoutStart": "Commencer la séance",
+  "workoutFinish": "Terminer la séance",
+  "workoutSetLabel": "Série {index}",
+  "@workoutSetLabel": {
+    "placeholders": {
+      "index": { "type": "int" }
+    }
+  },
+  "workoutReps": "Répétitions",
+  "workoutLoadKg": "Charge (kg)",
+  "workoutRestTimer": "Repos",
+  "workoutTargetLabel": "Objectif : {sets} × {reps}",
+  "@workoutTargetLabel": {
+    "placeholders": {
+      "sets": { "type": "int" },
+      "reps": { "type": "String" }
+    }
+  },
+
+  "measurementsTitle": "Poids et mensurations",
+  "measurementWeight": "Poids (kg)",
+  "progressPhotosTitle": "Photos de progression",
+  "progressPhotoSharedWithCoach": "Partagée avec mon coach",
+  "progressPhotoPrivate": "Privée",
+  "progressPhotoShareAction": "Partager avec mon coach",
+  "progressPhotoUnshareAction": "Ne plus partager",
+  "progressPhotoShareConfirmTitle": "Partager cette photo ?",
+  "progressPhotoShareConfirmBody": "Votre coach pourra voir cette photo jusqu'à ce que vous retiriez le partage.",
+
+  "nutritionTitle": "Plan alimentaire",
+  "nutritionToday": "Mes repas du jour",
+
+  "messagesTitle": "Messages",
+  "messagesDisabledPresentiel": "La messagerie n'est pas disponible en coaching présentiel.",
+
+  "syncStatusSynced": "À jour",
+  "syncStatusSyncing": "Synchronisation…",
+  "syncStatusPending": "{count, plural, =1{1 modification en attente} other{{count} modifications en attente}}",
+  "@syncStatusPending": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "syncStatusOffline": "Hors ligne — vos données sont enregistrées sur l'appareil",
+  "syncStatusError": "Synchronisation impossible pour le moment",
+
+  "errorNetwork": "Connexion impossible. Vérifiez votre réseau.",
+  "errorTimeout": "Le serveur met trop de temps à répondre.",
+  "errorServer": "Une erreur est survenue de notre côté. Réessayez dans un instant.",
+  "errorUnauthorized": "Votre session a expiré. Reconnectez-vous.",
+  "errorForbidden": "Vous n'avez pas accès à cette ressource.",
+  "errorNotFound": "Cette ressource est introuvable.",
+  "errorValidation": "Certaines informations sont invalides.",
+  "errorRateLimited": "Trop de tentatives. Patientez un instant.",
+  "errorUnknown": "Une erreur inattendue est survenue.",
+  "errorCertificatePinning": "Connexion refusée : le certificat du serveur n'est pas reconnu.",
+
+  "emptyStateNoClients": "Aucun client pour le moment. Invitez votre premier client.",
+  "emptyStateNoExercises": "Aucun exercice ne correspond à votre recherche.",
+  "emptyStateNoHistory": "Aucune séance enregistrée pour l'instant."
+}
