@@ -18,6 +18,23 @@ donne une confiance injustifiée dans la garantie la plus critique du produit.
 Ce script relit le rapport JUnit produit par pytest et exige que, pour chaque
 répertoire surveillé, au moins un test ait tourné et qu'aucun n'ait été skippé.
 
+xfail ≠ skip
+------------
+pytest écrit **les deux** dans la balise ``<skipped>``, et seul l'attribut ``type``
+les distingue (vérifié avec la version de pytest du projet, 2026-09-23) :
+
+* ``type="pytest.skip"``  → le test n'a pas tourné. C'est le cas qu'on traque.
+* ``type="pytest.xfail"`` → le test a tourné et a échoué comme prévu, parce que le
+  code n'est pas encore écrit. C'est la méthode *spec-first* de la QA
+  (``tests/support/pending.py``) : le test devient un vrai test, automatiquement, dès
+  que le symbole existe — sans marqueur à retirer à la main, donc sans risque de
+  marqueur périmé avalant une vraie régression.
+
+Traiter un xfail comme un skip rendrait ce garde rouge en permanence jusqu'à la fin de
+la phase 2 et reviendrait à interdire à la QA d'écrire ses tests en avance, qui est
+précisément la méthode retenue. Les xfail sont donc tolérés — mais comptés et affichés,
+pour qu'un groupe entièrement xfail reste visible dans le log.
+
 Usage : python .github/scripts/assert_db_tests_ran.py backend/reports/pytest.xml
 """
 
@@ -59,41 +76,58 @@ def main(argv: list[str]) -> int:
 
     ran: dict[str, int] = {w: 0 for w in WATCHED}
     skipped: dict[str, list[str]] = {w: [] for w in WATCHED}
+    xfailed: dict[str, int] = {w: 0 for w in WATCHED}
 
     for testcase in root.iter("testcase"):
         group = _group_of(testcase)
         if group is None:
             continue
         skip_node = testcase.find("skipped")
-        if skip_node is not None:
+        if skip_node is None:
+            ran[group] += 1
+        elif skip_node.get("type") == "pytest.xfail":
+            # Fonctionnalité pas encore écrite, déclarée comme telle. Toléré.
+            xfailed[group] += 1
+        else:
             reason = skip_node.get("message") or skip_node.text or "(sans raison)"
             name = testcase.get("name") or "(anonyme)"
             skipped[group].append(f"{name} — {reason.strip()}")
-        else:
-            ran[group] += 1
 
     failed = False
     for watched in WATCHED:
+        suffix = f", {xfailed[watched]} xfail (pas encore implémenté)" if xfailed[watched] else ""
+
         if skipped[watched]:
             failed = True
             print(
-                f"::error::{len(skipped[watched])} test(s) de {watched}/ ont été SKIPPÉS en CI. "
-                "Ces tests doivent tourner : ils vérifient l'isolation entre coachs "
-                "(ARCHITECTURE.md §4). Une suite verte avec ces tests skippés ne prouve rien."
+                f"::error::{len(skipped[watched])} test(s) de {watched}/ ont été SKIPPÉS en CI "
+                "(skip franc, pas xfail). Ces tests doivent tourner : ils vérifient l'isolation "
+                "entre coachs (ARCHITECTURE.md §4). Une suite verte avec ces tests skippés ne "
+                "prouve rien. Cause la plus fréquente : PostgreSQL injoignable, ou extras `dev` "
+                "non installés."
             )
             for line in skipped[watched][:10]:
                 print(f"  - {line}")
             if len(skipped[watched]) > 10:
                 print(f"  … et {len(skipped[watched]) - 10} autre(s).")
-        elif ran[watched] == 0:
+        elif ran[watched] == 0 and xfailed[watched] == 0:
             failed = True
             print(
                 f"::error::AUCUN test n'a été exécuté dans {watched}/. "
                 "Soit la collecte est cassée, soit le répertoire a été vidé — "
                 "dans les deux cas la CI ne vérifie plus ce qu'elle prétend vérifier."
             )
+        elif ran[watched] == 0:
+            # Tout le groupe est en attente d'implémentation : légitime en phase
+            # précoce, mais la CI ne vérifie alors rien ici — on le dit fort sans
+            # bloquer, sinon on interdirait à la QA d'écrire ses tests en avance.
+            print(
+                f"::warning::Aucun test réellement exécuté dans {watched}/ : "
+                f"les {xfailed[watched]} test(s) du groupe sont tous en xfail "
+                "(code pas encore écrit). Aucune garantie n'est vérifiée ici pour l'instant."
+            )
         else:
-            print(f"OK — {ran[watched]} test(s) exécuté(s) dans {watched}/, aucun skippé.")
+            print(f"OK — {ran[watched]} test(s) exécuté(s) dans {watched}/, aucun skip franc{suffix}.")
 
     return 1 if failed else 0
 

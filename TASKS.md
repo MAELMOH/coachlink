@@ -394,6 +394,17 @@ _(Tech Lead / chaque agent : consigner ici les décisions importantes avec la da
      requis** : attendre que `ci-sentinel.yml` apparaisse vert sur la PR #1 avant de le cocher
      comme required (il ne pouvait pas l'être avant ce correctif).
 
+  5. **Correctif du garde anti-skip, signalé par `back` le jour même : xfail ≠ skip.** pytest écrit
+     les deux dans la balise `<skipped>` du rapport JUnit, seul l'attribut `type` les distingue
+     (`pytest.skip` vs `pytest.xfail`) — vérifié avec la version de pytest du projet plutôt que
+     supposé. Le garde faisait donc échouer la CI sur les tests que la QA écrit *en avance* via
+     `tests/support/pending.py` (méthode spec-first délibérée : le test devient un vrai test dès
+     que le symbole existe, sans marqueur périmé à nettoyer). Les xfail sont désormais tolérés
+     mais comptés et affichés ; un groupe devenu 100 % xfail émet un `::warning::` (la CI ne
+     vérifie alors rien, mais bloquer reviendrait à interdire à la QA d'écrire en avance).
+     Le skip franc reste bloquant, c'est tout l'objet du garde. Validé sur le rapport JUnit réel
+     de la suite : 18 tests RLS et 44 tests d'intégration exécutés, 2 xfail tolérés, exit 0.
+
   Documenté aussi dans le README : section *Dépannage* (port 5432 déjà pris par un PostgreSQL
   hôte sous Windows → `POSTGRES_PORT=55432`, piège signalé par `back` qui coûte une heure faute
   de la moindre ligne dans les logs du conteneur ; et comment repérer une suite verte dont les
